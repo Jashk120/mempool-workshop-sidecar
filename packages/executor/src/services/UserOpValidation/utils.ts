@@ -1,20 +1,14 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { BigNumber, BytesLike } from "ethers";
-import { Interface, hexZeroPad, hexlify, keccak256 } from "ethers/lib/utils";
-import { BundlerCollectorReturn, CallEntry } from "@skandha/types/lib/executor";
+import { hexZeroPad, hexlify, keccak256 } from "ethers/lib/utils";
+import RpcError from "@skandha/types/lib/api/errors/rpc-error.js";
+import * as RpcErrorCodes from "@skandha/types/lib/api/errors/rpc-error-codes.js";
 import {
-  IEntryPoint__factory,
-  IPaymaster__factory,
-  IAccount__factory,
-} from "@skandha/types/lib/contracts/EPv7/factories/interfaces";
-import { SenderCreator__factory } from "@skandha/types/lib/contracts/EPv7/factories/core";
-import {
-  AccessedSlots,
-  ContractSizeInfo,
-  NativeTracerReturn,
-} from "@skandha/types/lib/executor/validation/nativeTracer";
-import { Hex } from "viem";
+  EthrexAccessedSlots,
+  EthrexContractSizeInfo,
+  FrameCallTraceFrame,
+} from "@skandha/types/lib/executor/validation/ethrexFrameTx";
 import { StakeInfo } from "../../interfaces.js";
 
 export function compareBytecode(
@@ -43,165 +37,6 @@ export function compareBytecode(
 
 export function toBytes32(b: BytesLike | number): string {
   return hexZeroPad(hexlify(b).toLowerCase(), 32);
-}
-
-function callCatch<T, T1>(x: () => T, def: T1): T | T1 {
-  try {
-    return x();
-  } catch {
-    return def;
-  }
-}
-
-function customERC7562TraceParser(
-  tracerResults: BundlerCollectorReturn,
-  xfaces: Interface
-): CallEntry[] {
-  const out: CallEntry[] = [];
-  const stack: any[] = [];
-  tracerResults.calls
-    .filter((x) => !x.type.startsWith("depth"))
-    .forEach((c) => {
-      if (c.type.match(/REVERT|RETURN/) != null) {
-        const top = stack.splice(-1)[0] ?? {
-          type: "top",
-          method: "validateUserOp",
-        };
-        const returnData: string = (c as any).data;
-        if (top.type.match(/CREATE/) != null) {
-          out.push({
-            to: top.to,
-            from: top.from,
-            type: top.type,
-            method: "",
-            return: `len=${returnData.length}`,
-          });
-        } else {
-          const method = callCatch(
-            () => xfaces.getFunction(top.method),
-            top.method
-          );
-          if (c.type === "REVERT") {
-            const parsedError = callCatch(
-              () => xfaces.parseError(returnData),
-              returnData
-            );
-            out.push({
-              to: top.to,
-              from: top.from,
-              type: top.type,
-              method: method.name,
-              value: top.value,
-              revert: parsedError,
-            });
-          } else {
-            const ret = callCatch(
-              () => xfaces.decodeFunctionResult(method, returnData),
-              returnData
-            );
-            out.push({
-              to: top.to,
-              from: top.from,
-              type: top.type,
-              value: top.value,
-              method: method.name ?? method,
-              return: ret,
-            });
-          }
-        }
-      } else {
-        stack.push(c);
-      }
-    });
-  return out;
-}
-
-function nativeERC7562TraceParser(
-  tracerResults: NativeTracerReturn,
-  xfaces: Interface,
-  entryPoint: string,
-  out: CallEntry[] = [],
-  epTopLevelCalls: NativeTracerReturn[] = []
-): [CallEntry[], NativeTracerReturn[]] {
-  if (!tracerResults.calls) {
-    return [out, epTopLevelCalls];
-  }
-
-  if (tracerResults.calls && epTopLevelCalls.length === 0) {
-    for (const x of tracerResults.calls) {
-      if (x.from === entryPoint) {
-        epTopLevelCalls.push(x);
-      }
-    }
-  }
-
-  tracerResults.calls
-    .filter((x) => !x.type.startsWith("depth"))
-    .forEach((x) => {
-      const method = callCatch(
-        () => xfaces.getFunction(x.input.substring(0, 10)).name,
-        x.input.substring(0, 10)
-      );
-      nativeERC7562TraceParser(x, xfaces, entryPoint, out, epTopLevelCalls);
-      out.push({
-        method,
-        from: x.from,
-        to: x.to,
-        type: x.type,
-        value: x.value ? (x.value as Hex) : undefined,
-        return: x.error
-          ? callCatch(() => xfaces.parseError(x.output), x.output)
-          : callCatch(
-              () => xfaces.decodeFunctionResult(method, x.output),
-              x.output
-            ),
-      });
-    });
-  return [out, epTopLevelCalls];
-}
-
-/**
- * parse all call operation in the trace.
- * notes:
- * - entries are ordered by the return (so nested call appears before its outer call
- * - last entry is top-level return from "simulateValidation". it as ret and rettype, but no type or address
- * @param tracerResults
- */
-export function parseCallStack<T>(
-  tracerResults: BundlerCollectorReturn | NativeTracerReturn,
-  nativeTracer: boolean,
-  entryPoint: string
-): T {
-  const abi = Object.values(
-    [
-      ...IEntryPoint__factory.abi,
-      ...IAccount__factory.abi,
-      ...IPaymaster__factory.abi,
-    ].reduce((set, entry: any) => {
-      const key = `${entry.name}(${entry?.inputs
-        ?.map((i: any) => i.type)
-        .join(",")})`;
-      return {
-        ...set,
-        [key]: entry,
-      };
-    }, {})
-  ) as any;
-
-  const xfaces = new Interface(abi);
-
-  if (nativeTracer) {
-    return nativeERC7562TraceParser(
-      tracerResults as NativeTracerReturn,
-      xfaces,
-      entryPoint
-    ) as T;
-  }
-  return customERC7562TraceParser(
-    tracerResults as BundlerCollectorReturn,
-    xfaces
-  ) as T;
-  // TODO: verify that stack is empty at the end.
 }
 
 /**
@@ -240,14 +75,6 @@ export function parseEntitySlots(
   return entitySlots;
 }
 
-export const callsFromEntryPointMethodSigs: { [key: string]: string } = {
-  factory: SenderCreator__factory.createInterface().getSighash("createSender"),
-  account: IAccount__factory.createInterface().getSighash("validateUserOp"),
-  paymaster: IPaymaster__factory.createInterface().getSighash(
-    "validatePaymasterUserOp"
-  ),
-};
-
 // return true if the given slot is associated with the given address, given the known keccak operations:
 // @param slot the SLOAD/SSTORE slot address we're testing
 // @param addr - the address we try to check for association with
@@ -278,7 +105,7 @@ export function isSlotAssociatedWith(
 }
 
 export function getOpcodesInfo(
-  call: NativeTracerReturn,
+  call: FrameCallTraceFrame,
   usedOpCodes: { [key: string]: number } = {}
 ): { [opCode: string]: number } {
   if (!call) {
@@ -302,28 +129,11 @@ export function getOpcodesInfo(
   return usedOpCodes;
 }
 
-export function getReferencedContracts(
-  calls: NativeTracerReturn[] | undefined,
-  refrencedContracts: string[] = []
-): string[] {
-  if (!calls) {
-    return refrencedContracts;
-  }
-
-  for (const x of calls) {
-    const addresses = Object.keys(x.contractSize);
-    refrencedContracts.push(...addresses);
-    getReferencedContracts(x.calls);
-  }
-
-  return refrencedContracts;
-}
-
 export function getAccessInfo(
-  call: NativeTracerReturn,
-  accessInfo: { [address: string]: AccessedSlots } = {}
+  call: FrameCallTraceFrame,
+  accessInfo: { [address: string]: EthrexAccessedSlots } = {}
 ): {
-  [address: string]: AccessedSlots;
+  [address: string]: EthrexAccessedSlots;
 } {
   if (!call) {
     return accessInfo;
@@ -331,7 +141,30 @@ export function getAccessInfo(
 
   const { reads, transientReads, transientWrites, writes } = call.accessedSlots;
 
-  const addr = call.type === "DELEGATECALL" ? call.from : call.to;
+  // DELEGATECALL and CALLCODE both execute against the CALLER's storage
+  // (they differ from each other only in msg.sender/msg.value propagation,
+  // not storage context) - so both must attribute here to `call.from`.
+  const isCallerStorageContext =
+    call.type === "DELEGATECALL" || call.type === "CALLCODE";
+
+  if (!isCallerStorageContext && call.to == null) {
+    // `to` is typed `Address | null` only because ethrex's Rust
+    // `FrameCallTraceFrame` derives `Default` (which needs *some* value for
+    // every field) - every frame actually reaching `erc7562Trace` was built
+    // by `Erc7562FrameTracer::enter()`, which always sets `to: Some(to)` for
+    // every one of its call sites (CALL/CALLCODE/STATICCALL/DELEGATECALL/
+    // CREATE/CREATE2/SELFDESTRUCT all pass a concrete, non-optional `Address`
+    // - see erc7562_tracer.rs). A `null` here means the wire data doesn't
+    // match that invariant - silently bucketing the access under a
+    // placeholder address would misattribute a real storage touch to
+    // nothing, defeating the exact check this function exists to feed.
+    throw new RpcError(
+      `ethrex trace frame has no resolvable target address (type=${call.type})`,
+      RpcErrorCodes.INTERNAL_ERROR
+    );
+  }
+
+  const addr = isCallerStorageContext ? call.from : (call.to as `0x${string}`);
 
   for (const x of Object.keys(reads)) {
     if (accessInfo[addr] && accessInfo[addr].reads?.[x]) {
@@ -357,10 +190,8 @@ export function getAccessInfo(
 
   for (const x of Object.keys(transientReads)) {
     if (accessInfo[addr] && accessInfo[addr].transientReads?.[x]) {
-      accessInfo[addr].transientReads[x] = [
-        ...accessInfo[addr].transientReads[x],
-        ...transientReads[x],
-      ];
+      accessInfo[addr].transientReads[x] =
+        accessInfo[addr].transientReads[x] + transientReads[x];
     } else {
       if (accessInfo[addr]) {
         accessInfo[addr].transientReads = {
@@ -434,36 +265,10 @@ export function getAccessInfo(
   return accessInfo;
 }
 
-export function getTopLevelEpCalls(
-  tracerResults: NativeTracerReturn,
-  entryPoint: string,
-  epTopLevelCalls: NativeTracerReturn[] = []
-): NativeTracerReturn[] {
-  if (!tracerResults) {
-    return epTopLevelCalls;
-  }
-
-  if (tracerResults.calls) {
-    if (epTopLevelCalls.length === 0) {
-      for (const x of tracerResults.calls) {
-        if (x.from === entryPoint) {
-          epTopLevelCalls.push(x);
-        }
-      }
-    } else {
-      for (const x of tracerResults.calls) {
-        getTopLevelEpCalls(x, entryPoint, epTopLevelCalls);
-      }
-    }
-  }
-
-  return epTopLevelCalls;
-}
-
 export function getContractSizes(
-  tracerResults: NativeTracerReturn,
-  contractSizes: { [address: string]: ContractSizeInfo}
-): { [address: string]: ContractSizeInfo } {
+  tracerResults: FrameCallTraceFrame,
+  contractSizes: { [address: string]: EthrexContractSizeInfo}
+): { [address: string]: EthrexContractSizeInfo } {
   if(!tracerResults) {
     return contractSizes;
   }
@@ -479,7 +284,7 @@ export function getContractSizes(
   return contractSizes
 };
 
-export function outOfGasExists(trace: NativeTracerReturn): boolean {
+export function outOfGasExists(trace: FrameCallTraceFrame): boolean {
   if (trace.outOfGas) return true;
   if (trace.calls) {
     for (const x of trace.calls) {
@@ -489,9 +294,38 @@ export function outOfGasExists(trace: NativeTracerReturn): boolean {
   return false;
 }
 
+/**
+ * ERC-7562 `[OP-061]`: "`CALL` with `value` is forbidden." No EntryPoint
+ * exception applies to a frame transaction - the ERC-4337-only exemptions
+ * `[OP-051]`-`[OP-055]` this rule's original EntryPoint carve-out referred
+ * to (`depositTo`/fallback-with-value/etc.) have no EIP-8141 equivalent, so
+ * every nested CALL-family opcode with nonzero value is banned
+ * unconditionally.
+ *
+ * Only checks `frame.calls` (nested scopes actually opened by a CALL-family
+ * opcode during execution), never `frame` itself: a frame-transaction
+ * frame's own root scope's `value` is always zero by construction (see
+ * `FrameCallTraceFrame.value`'s doc comment) - it reflects the frame's own
+ * declared `value`, a structural part of the transaction, not something a
+ * nested `CALL` opcode transferred.
+ */
+export function hasNestedCallWithValue(frame: FrameCallTraceFrame): boolean {
+  if (!frame.calls) {
+    return false;
+  }
+  for (const child of frame.calls) {
+    if (BigInt(child.value) > BigInt(0)) {
+      return true;
+    }
+    if (hasNestedCallWithValue(child)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 export function getExtCodeAccessInfos(
-  tracerResults: NativeTracerReturn,
+  tracerResults: FrameCallTraceFrame,
   extCodeAccessInfos: string[] = []
 ): string[] {
   if(!tracerResults) {

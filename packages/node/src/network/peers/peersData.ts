@@ -1,4 +1,4 @@
-import { PeerId } from "@libp2p/interface-peer-id";
+import { PeerId } from "@libp2p/interface";
 import { ts } from "@skandha/types/lib/index.js";
 import { ClientKind } from "./client.js";
 

@@ -13,6 +13,10 @@ import {
   IMetricsArgs,
   options as metricsOptions,
 } from "./bundlerOptions/metrics.js";
+import {
+  IExplorerArgs,
+  options as explorerOptions,
+} from "./bundlerOptions/explorer.js";
 
 const __dirname = process.cwd();
 
@@ -56,7 +60,8 @@ const globalSingleOptions: ICliCommandOptions<IGlobalSingleArgs> = {
 export type IGlobalArgs = IGlobalSingleArgs &
   IApiArgs &
   INetworkArgs &
-  IExecutorArgs;
+  IExecutorArgs &
+  IExplorerArgs;
 
 export const globalOptions = {
   ...globalSingleOptions,
@@ -64,16 +69,19 @@ export const globalOptions = {
   ...networkOptions,
   ...executorOptions,
   ...metricsOptions,
+  ...explorerOptions,
 };
 
 export type IStandaloneGlobalArgs = IGlobalSingleArgs &
   IApiArgs &
   IExecutorArgs &
-  IMetricsArgs;
+  IMetricsArgs &
+  IExplorerArgs;
 
 export const standaloneGlobalOptions = {
   ...globalSingleOptions,
   ...apiOptions,
   ...executorOptions,
   ...metricsOptions,
+  ...explorerOptions,
 };

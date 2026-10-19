@@ -1,5 +1,4 @@
-// @ts-ignore
-import { unsigned as varintCodec } from "uint8-varint";
+import { encode as encodeVarint } from "uint8-varint";
 import {
   EncodedPayload,
   EncodedPayloadType,
@@ -29,7 +28,7 @@ export async function* writeSszSnappyPayload<T>(
  */
 export async function* encodeSszSnappy(bytes: Buffer): AsyncGenerator<Buffer> {
   // MUST encode the length of the raw SSZ bytes, encoded as an unsigned protobuf varint
-  yield Buffer.from(varintCodec.encode(bytes.length));
+  yield Buffer.from(encodeVarint(bytes.length));
 
   // By first computing and writing the SSZ byte length, the SSZ encoder can then directly
   // write the chunk contents to the stream. Snappy writer compresses frame by frame

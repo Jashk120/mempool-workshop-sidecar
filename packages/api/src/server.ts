@@ -6,11 +6,9 @@ import fastify, {
 } from "fastify";
 import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
-import RpcError from "@skandha/types/lib/api/errors/rpc-error.js";
 import { ServerConfig } from "@skandha/types/lib/api/interfaces";
 import logger from "./logger.js";
-import { HttpStatus } from "./constants.js";
-import { JsonRpcRequest } from "./interface.js";
+import { toErrorResponse } from "./utils/errorResponse.js";
 
 export class Server {
   constructor(
@@ -88,25 +86,8 @@ export class Server {
       // eslint-disable-next-line no-console
       logger.error(err);
 
-      if (err instanceof RpcError) {
-        const body = req.body as JsonRpcRequest;
-        const error = {
-          message: err.message,
-          data: err.data,
-          code: err.code,
-        };
-        return res.status(HttpStatus.OK).send({
-          jsonrpc: body.jsonrpc,
-          id: body.id,
-          error,
-        });
-      }
-
-      return res
-        .status(err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR)
-        .send({
-          error: "Unexpected behaviour",
-        });
+      const { status, payload } = toErrorResponse(err, req.body);
+      return res.status(status).send(payload);
     };
 
     this.http.setErrorHandler(errorHandler);

@@ -1,72 +1,80 @@
-import { Eth } from "@skandha/executor/lib/modules/eth";
-import {
-  EstimatedUserOperationGas,
-  UserOperationByHashResponse,
-  UserOperationReceipt,
-} from "@skandha/types/lib/api/interfaces";
+import { Eth } from "@skandha/executor/lib/modules/eth.js";
+import { FrameGasEstimate } from "@skandha/executor/lib/modules/interfaces.js";
+import { FrameTxMempoolEntrySerialized } from "@skandha/executor/lib/entities/interfaces.js";
+import { FrameTxReceipt } from "@skandha/types/lib/executor/validation/frameTxReceipt.js";
+import { Hex } from "viem";
 import { RpcMethodValidator } from "../utils/RpcMethodValidator.js";
-import { SendUserOperationGasArgs } from "../dto/SendUserOperation.dto.js";
-import { EstimateUserOperationGasArgs } from "../dto/EstimateUserOperation.dto.js";
+import { FrameTransactionDto } from "../dto/SendFrameTransaction.dto.js";
+import { EstimateFrameTransactionArgs } from "../dto/EstimateFrameTransaction.dto.js";
+import { toFrameTransaction, toPartialFrameTransaction } from "../utils/frameTx.js";
 
+/**
+ * The `eth_*` RPC surface for EIP-8141 frame transactions - see
+ * `packages/executor/src/modules/eth.ts` for the method-by-method rationale
+ * this wraps.
+ *
+ * `getSupportedEntryPoints` is dropped entirely, not just renamed: there is
+ * exactly one fixed `ENTRY_POINT` sentinel address under EIP-8141, not a
+ * configurable/validated set.
+ */
 export class EthAPI {
   constructor(private ethModule: Eth) {}
 
   /**
+   * @param tx a full, signed frame transaction (hex-string wire shape, see
+   *   `SendFrameTransaction.dto.ts`).
+   * @returns the transaction's own hash.
+   */
+  @RpcMethodValidator(FrameTransactionDto)
+  async sendFrameTransaction(tx: FrameTransactionDto): Promise<Hex> {
+    return await this.ethModule.sendFrameTransaction(toFrameTransaction(tx));
+  }
+
+  /**
+   * Estimates gas for a (possibly partial/unsigned) frame transaction.
+   * `Eth.estimateFrameTransactionGas` covers both dummy-signature and
+   * real-signature estimation with a single method, so there is no
+   * `testingMode` branch needed at the `app.ts` dispatch layer.
+   */
+  @RpcMethodValidator(EstimateFrameTransactionArgs)
+  async estimateFrameTransactionGas(
+    tx: EstimateFrameTransactionArgs
+  ): Promise<FrameGasEstimate> {
+    return await this.ethModule.estimateFrameTransactionGas(
+      toPartialFrameTransaction(tx)
+    );
+  }
+
+  /**
+   * @param hash the frame transaction's own hash.
+   * @returns the mempool entry (serialized) if still known to this node's
+   *   mempool, `null` otherwise. Unlike the old `getUserOperationByHash`,
+   *   there is no EntryPoint-event-log/Blockscout fallback for a
+   *   transaction already pruned after mining - documented gap, see
+   *   `Eth.getFrameTransactionByHash`'s own doc comment.
+   */
+  async getFrameTransactionByHash(
+    hash: Hex
+  ): Promise<FrameTxMempoolEntrySerialized | null> {
+    return await this.ethModule.getFrameTransactionByHash(hash);
+  }
+
+  /**
+   * @param hash the frame transaction's own hash.
+   * @returns a full `FrameTxReceipt`.
    *
-   * @param userOp a full user-operation struct. All fields MUST be set as hex values. empty bytes block (e.g. empty initCode) MUST be set to "0x"
-   * @param entryPoint the entrypoint address the request should be sent through. this MUST be one of the entry points returned by the supportedEntryPoints rpc call.
+   * Deliberately NOT translated into a `null` response on "not found":
+   * `ReceiptService.getReceipt` throws the same `RpcError`/
+   * `RpcErrorCodes.SERVER_ERROR` for both "not yet mined" and "not a frame
+   * transaction", distinguishable only by message text. Catching and
+   * string-matching that message here to synthesize a `null` would be
+   * fragile; letting the `RpcError` surface as a JSON-RPC error instead
+   * means a polling client treats it the same way it would have treated
+   * `null` (retry later), but gets a real reason in `error.message` instead
+   * of an ambiguous `null`.
    */
-  @RpcMethodValidator(SendUserOperationGasArgs)
-  async sendUserOperation(args: SendUserOperationGasArgs): Promise<string> {
-    return await this.ethModule.sendUserOperation(args);
-  }
-
-  /**
-   * @params args sama as in sendUserOperation
-   */
-  async estimateUserOpGasAndValidateSignature(
-    args: SendUserOperationGasArgs
-  ): Promise<EstimatedUserOperationGas> {
-    return await this.ethModule.estimateUserOperationGasWithSignature(args);
-  }
-
-  /**
-   * Estimate the gas values for a UserOperation. Given UserOperation optionally without gas limits and gas prices, return the needed gas limits.
-   * The signature field is ignored by the wallet, so that the operation will not require user’s approval.
-   * Still, it might require putting a “semi-valid” signature (e.g. a signature in the right length)
-   * @param userOp same as eth_sendUserOperation gas limits (and prices) parameters are optional, but are used if specified
-   * maxFeePerGas and maxPriorityFeePerGas default to zero
-   * @param entryPoint Entry Point
-   * @returns
-   */
-  @RpcMethodValidator(EstimateUserOperationGasArgs)
-  async estimateUserOperationGas(
-    args: EstimateUserOperationGasArgs
-  ): Promise<EstimatedUserOperationGas> {
-    return await this.ethModule.estimateUserOperationGas(args);
-  }
-
-  /**
-   *
-   * @param hash user op hash
-   * @returns null in case the UserOperation is not yet included in a block, or a full UserOperation,
-   * with the addition of entryPoint, blockNumber, blockHash and transactionHash
-   */
-  async getUserOperationByHash(
-    hash: string
-  ): Promise<UserOperationByHashResponse | null> {
-    return await this.ethModule.getUserOperationByHash(hash);
-  }
-
-  /**
-   *
-   * @param hash user op hash
-   * @returns a UserOperation receipt
-   */
-  async getUserOperationReceipt(
-    hash: string
-  ): Promise<UserOperationReceipt | null> {
-    return await this.ethModule.getUserOperationReceipt(hash);
+  async getFrameTransactionReceipt(hash: Hex): Promise<FrameTxReceipt> {
+    return await this.ethModule.getFrameTransactionReceipt(hash);
   }
 
   /**
@@ -75,14 +83,5 @@ export class EthAPI {
    */
   async getChainId(): Promise<number> {
     return await this.ethModule.getChainId();
-  }
-
-  /**
-   * Returns an array of the entryPoint addresses supported by the client
-   * The first element of the array SHOULD be the entryPoint addresses preferred by the client.
-   * @returns Entry points
-   */
-  async getSupportedEntryPoints(): Promise<string[]> {
-    return await this.ethModule.getSupportedEntryPoints();
   }
 }

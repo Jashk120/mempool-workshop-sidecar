@@ -1,156 +1,226 @@
 <div align="center">
-  <h1 align="center">Skandha</h1>
-</div>
-
-<!-- PROJECT LOGO -->
-
-<div align="center">
-  <img src="https://public.etherspot.io/assets/etherspot.gif" width="200" height="200">
-  <p>
-    <b>
-      A modular, developer-friendly Typescript Bundler for Ethereum EIP-4337 Account Abstraction
-    </b>
-   </p>
-</div>
-
-<div align="center">
-  <p>
-    <b>
-       Warning! This repo/software is under active development
-    </b>
-   </p>
+  <h1>Skandha</h1>
+  <p><b>A TypeScript bundler and P2P sidecar for EIP-8141 frame transactions</b></p>
 </div>
 
 > [!IMPORTANT]
-> **Skandha v1** - supports EntryPoint 0.6.0 and can be found on [releases/v0.6](https://github.com/etherspot/skandha/tree/releases/v0.6)
-> 
-> **Skandha v2** - supports EntryPoint 0.7.0 and can be found on [releases/v0.7](https://github.com/etherspot/skandha/tree/releases/v0.7)
-> 
-> **Skandha v3** - supports EntryPoint 0.8.0 and can be found on [master](https://github.com/etherspot/skandha/tree/master)
+> This is a fork of [Etherspot's Skandha](https://github.com/etherspot/skandha), an ERC-4337
+> Account Abstraction bundler. This fork does not implement ERC-4337 — it targets
+> [EIP-8141](https://eips.ethereum.org/EIPS/eip-8141), a proposed native Ethereum transaction type
+> that replaces the contract-level `UserOperation`/`EntryPoint` model with protocol-native
+> validation and execution.
 
-## Important links
+**🔭 [Explore the public devnet](https://altmempoolexplorer.forshtat.com/)** — a live view of the
+mempool, admission reports and peers for both instances below. No setup required.
 
-**[Install Skandha](https://etherspot.fyi/skandha/installation)**
-| [Chains supported](https://etherspot.fyi/prime-sdk/chains-supported)
-| [UserOp Fee history](https://etherspot.fyi/skandha/feehistory)
+## What this is
 
-## ⚙️ How to run (from Source code)
+Skandha exposes an `eth_sendFrameTransaction` JSON-RPC API, validates and simulates frame
+transactions against an execution client, relays them on-chain, and — optionally — gossips them
+between bundler nodes over a libp2p peer-to-peer mempool.
 
-Run with one-liner:
+There is no `EntryPoint` contract and no `eth_sendUserOperation`. A frame transaction is validated
+and relayed largely as-is, rather than assembled into a batch.
+
+Because EIP-8141 is not yet live on any public network, running Skandha requires an execution
+client that implements it. [ethrex](https://github.com/lambdaclass/ethrex)'s `eip8141-tracer`
+branch is currently the only one that does; a standard client such as geth cannot validate or
+simulate frame transactions at all.
+
+## Running from source
 
 ```sh
-curl -fsSL https://skandha.run | bash
+bun install
+bun run build
+cp config.json.default config.json
 ```
-Or follow the steps below:
 
-1. install all dependencies by running `bun install`
-2. patch for bcrypto `cd ./node_modules/bcrypto && bun install`
-3. build `bun build`
-4. `cp config.json.default config.json`
-5. edit `config.json`
-6. (optional) run local geth-node from `test/geth-dev`
-7. run `./skandha standalone`
-8. The bundler will be available on `http://localhost:14337/rpc/`
+Edit `config.json`:
 
-## 🐳 How to run (a Docker image)
+- point `rpcEndpoint` and `rpcEndpointSubmit` at an EIP-8141-aware execution client
+- set `relayers` to the private key(s) that will submit transactions on-chain
 
-1. `cp config.json.default config.json`
-2. edit `config.json`
-3. `docker build -t etherspot/skandha .`
-4. `docker run --mount type=bind,source="$(pwd)"/config.json,target=/usr/app/config.json,readonly -dp 14337:14337 etherspot/skandha standalone`
+Then start the bundler:
 
+```sh
+./skandha standalone
+```
 
-## 📜 Additional features
-- [x] Unsafe mode - bypass opcode & stake validation
-- [x] Redirect RPC - Redirect ETH rpc calls to the underlying execution client. This is needed if you use UserOp.js
+The RPC API is available at `http://localhost:14337/rpc/`.
 
-### ⚡️ CLI Options
-- `--unsafeMode` - enables unsafeMode
-- `--redirectRpc` - enables redirecting eth rpc calls
-- `--executor.bundlingMode manual|auto` - sets bundling mode to `manual` or `auto` on start. Default value is `auto`
-- `--metrics.enable false|true` - enable Prometheus metrics (default - `false`)
-- `--metrics.host` - metrics host (default - `127.0.0.1`)
-- `--metrics.port` - metrics port (default - `8008`)
+For a local devnet to develop against, see [P2P.md](./P2P.md) — it walks through running
+[ethrex](https://github.com/lambdaclass/ethrex) via `test/e2e/ethrex-devnet.sh` and connecting
+Skandha to it.
 
-## 🔑 Relayer Configuration
+## Running with Docker
 
-#### Simplest config.json
-```yaml
+```sh
+cp config.json.default config.json
+# edit config.json
+docker build -t skandha .
+docker run \
+  --mount type=bind,source="$(pwd)"/config.json,target=/usr/app/config.json,readonly \
+  -dp 14337:14337 \
+  skandha standalone
+```
+
+## CLI options
+
+| Flag | Description | Default |
+|---|---|---|
+| `--configFile <path>` | Path to the config file | `./config.json` |
+| `--dataDir <path>` | Path to the data directory | `~/.skandha/db/` |
+| `--redirectRpc` | Proxy standard `eth_*` calls straight to the underlying execution client | `false` |
+| `--executor.bundlingMode manual\|auto` | Relay transactions on an interval (`auto`), or only on demand (`manual`). Either way the node keeps following the chain, so transactions it holds are marked `OnChain`/`Reverted` when they are mined, including by another node | `auto` |
+| `--api.port <port>` | RPC server port | `14337` |
+| `--metrics.enable` | Enable Prometheus metrics | `false` |
+| `--metrics.host <host>` | Metrics server host | `127.0.0.1` |
+| `--metrics.port <port>` | Metrics server port | `8008` |
+| `--unsafeMode` | Vestigial — currently only affects EIP-2930 transaction-type selection | `false` |
+
+Run `./skandha standalone --help` or `./skandha node --help` for the full list.
+
+## Configuration
+
+`entryPoints`, `canonicalEntryPoint`, and `supportedMempools[].entryPoint` must all be set to the
+fixed EIP-8141 sentinel address below — not a deployed contract. Leaving one of them at a stale
+ERC-4337-style address will silently disable gossip publishing when running in `node` mode.
+
+```json
 {
-  "entryPoints": [
-    "0x0000000071727De22E5E9d8BAf0edAc6f37da032"
+  "entryPoints": ["0x00000000000000000000000000000000000000aa"],
+  "canonicalEntryPoint": "0x00000000000000000000000000000000000000aa",
+  "standardMempoolId": "QmcFZKUX9qoo3StwVycJTAhwdiqbEjcwNvQVK246p3z1rk",
+  "supportedMempools": [
+    {
+      "mempoolId": "QmcFZKUX9qoo3StwVycJTAhwdiqbEjcwNvQVK246p3z1rk",
+      "entryPoint": "0x00000000000000000000000000000000000000aa"
+    }
   ],
-  "relayers": [
-    "0x{RELAYER-PRIVATE-KEY}"
-  ],
-  "rpcEndpoint": "https://polygon-mumbai.blockpi.network/v1/rpc/public"
+  "relayers": ["0x{RELAYER_PRIVATE_KEY}"],
+  "rpcEndpoint": "http://localhost:8545"
 }
 ```
 
-#### config.json with a default value of each config parameter
+`relayers` and a few other fields can also be set via environment variables instead of the config
+file — `SKANDHA_RELAYERS`, `SKANDHA_BENEFICIARY`, `SKANDHA_RPC`, and similar.
 
-```yaml
+### Full reference
+
+```jsonc
 {
-  "entryPoints": [ # supported entry points
-    "0x0000000071727De22E5E9d8BAf0edAc6f37da032"
+  "entryPoints": ["0x00000000000000000000000000000000000000aa"],
+  "canonicalEntryPoint": "0x00000000000000000000000000000000000000aa", // must match entryPoints[0]
+  "standardMempoolId": "QmcFZKUX9qoo3StwVycJTAhwdiqbEjcwNvQVK246p3z1rk",
+  "supportedMempools": [
+    {
+      "mempoolId": "QmcFZKUX9qoo3StwVycJTAhwdiqbEjcwNvQVK246p3z1rk",
+      "entryPoint": "0x00000000000000000000000000000000000000aa"
+    }
   ],
-  "relayers": [
-    "0x0101010101010101010101010101010101010101010101010101010101010101",
-    "test test test test test test test test test test test junk"
-  ], # relayers private keys, can access from here or via environment variables (SKANDHA_MUMBAI_RELAYERS | SKANDHA_DEV_RELAYERS | etc.)
-  "beneficiary": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266", # optional, fee collector, avaiable via env var (SKANDHA_MUMBAI_BENEFICIARY | etc) - if not set, relayer will be used
-  "rpcEndpoint": "http://localhost:8545", # rpc provider, also available via env variable (SKANDHA_MUMBAI_RPC | etc)
-  "minInclusionDenominator": 10, # optional, see EIP-4337
-  "throttlingSlack": 10, # optional, see EIP-4337
-  "banSlack": 50 # optional, see EIP-4337
-  "minStake": 10000000000, # optional, min stake of an entity (in wei)
-  "minUnstakeDelay": 0, # optional, min unstake delay of an entity
-  "minSignerBalance": 1, # optional, default is 0.1 ETH. If the relayer's balance drops lower than this, it will be selected as a fee collector
-  "multicall": "0xcA11bde05977b3631167028862bE2a173976CA11", # optional, multicall3 contract (see https://github.com/mds1/multicall#multicall3-contract-addresses)
-  "estimationStaticBuffer": 21000, # optional,adds certain amount of gas to callGasLimit on estimation
-  "validationGasLimit": 10e6, # optional,gas limit during simulateHandleOps and simulateValidation calls
-  "receiptLookupRange": 1024, # optional,limits the block range of getUserOperationByHash and getUserOperationReceipt
-  "etherscanApiKey": "", # optional,etherscan api is used to fetch gas prices
-  "conditionalTransactions": false, # optional,enable conditional transactions
-  "rpcEndpointSubmit": "", # optional,rpc endpoint that is used only during submission of a bundle
-  "gasPriceMarkup": 0, # optional,adds % markup on reported gas price via skandha_getGasPrice, 10000 = 100.00%, 500 = 5%
-  "enforceGasPrice": false, # optional,do not bundle userops with low gas prices
-  "enforceGasPriceThreshold": 1000, # optional,gas price threshold in bps. If set to 500, userops' gas price is allowed to be 5% lower than the network's gas price
-  "eip2930": false, # optional, enables eip-2930
-  "useropsTTL": 300, # optional, Userops time to live (in seconds)
-  "whitelistedEntities": { # optional, Entities that bypass stake and opcode validation (array of addresses)
+  "relayers": ["0x{RELAYER_PRIVATE_KEY}"],
+  "beneficiary": "0x{FEE_COLLECTOR_ADDRESS}", // optional, defaults to the relayer
+  "rpcEndpoint": "http://localhost:8545",
+  "rpcEndpointSubmit": "", // optional, used only when submitting a relayed transaction
+  "minInclusionDenominator": 10, // optional, ERC-7562 reputation parameter
+  "throttlingSlack": 10, // optional, ERC-7562 reputation parameter
+  "banSlack": 50, // optional, ERC-7562 reputation parameter
+  "minStake": 10000000000, // optional, minimum entity stake in wei
+  "minUnstakeDelay": 0, // optional, minimum entity unstake delay
+  "stakingRegistryAddress": "0x...", // optional, EIP-8421 IStakingRegistry contract address; unset/zero means every entity reads as unstaked
+  "minSignerBalance": 1, // optional, minimum relayer balance (in ETH) before it stops being used as a fee collector
+  "multicall": "0xcA11bde05977b3631167028862bE2a173976CA11", // optional, multicall3 contract address
+  "estimationStaticBuffer": 21000, // optional, gas added to callGasLimit on estimation
+  "receiptLookupRange": 1024, // optional, block range searched by getFrameTransactionByHash/getFrameTransactionReceipt
+  "etherscanApiKey": "", // optional, used to fetch gas prices
+  "conditionalTransactions": false, // optional
+  "gasPriceMarkup": 0, // optional, markup applied to skandha_getGasPrice, in bps (500 = 5%)
+  "enforceGasPrice": false, // optional, reject transactions priced below the network gas price
+  "enforceGasPriceThreshold": 1000, // optional, allowed shortfall in bps when enforceGasPrice is set
+  "eip2930": false, // optional
+  "useropsTTL": 300, // optional, mempool entry time-to-live in seconds
+  "whitelistedEntities": { // optional, addresses exempt from stake and opcode validation
     "factory": [],
     "paymaster": [],
     "account": []
   },
-  "bundleGasLimitMarkup": 25000, # optional, adds some amount of additional gas to a bundle tx
-  "relayingMode": "classic"; # optional, "flashbots" for Flashbots Builder API, "merkle" for Merkle.io
-  "bundleInterval": 10000, # bundle creation interval
-  "bundleSize": 4, # optional, max size of a bundle, 4 userops by default
-  "pvgMarkup": 0 # optional, adds some gas on top of estimated PVG
+  "maxConcurrentSubmissions": 10, // optional, maximum in-flight relay submissions
+  "bundleInterval": 10000, // interval (ms) between relay passes in auto mode
+  "maxSubmitAttempts": 3, // optional, resubmission attempts before an entry is cancelled
+  "bundleSize": 4, // optional, maximum transactions relayed per pass
+  "pvgMarkup": 0 // optional, gas added on top of the estimated pre-verification gas
 }
 ```
-## 💬 Contact
 
-If you have any questions or feedback about the ERC-4337 Bundler project, please feel free to reach out to us.
+## Keyed nonces and recent roots (EIP-8250 / EIP-8272)
 
-- [Follow on Twitter](https://twitter.com/etherspot)
-- [Join our discord](https://discord.etherspot.io/)
+Frame transactions carry an [EIP-8250](https://eips.ethereum.org/EIPS/eip-8250) keyed nonce and,
+optionally, [EIP-8272](https://eips.ethereum.org/EIPS/eip-8272) recent-root references. Together
+they let one sender, such as a privacy pool contract, have many independent transactions in
+flight: each uses its own nonce key (for example derived from a nullifier) and proves against a
+root the sender published on chain.
 
-## 📄 License
+**RPC fields** (`eth_sendFrameTransaction`, `eth_estimateFrameTransactionGas`, all hex):
 
-Licensed under the [MIT License](https://github.com/etherspot/skandha/blob/master/LICENSE).
+| Field | Meaning |
+| --- | --- |
+| `nonceKeys` | 1 to 16 strictly increasing keys. `["0x0"]` is the sender's ordinary account nonce; other keys are tracked in the `NONCE_MANAGER` predeploy (`0x…8250`). Key 0 is only valid on its own. |
+| `nonceSeq` | Must equal the current sequence of every key in `nonceKeys`. |
+| `recentRootReferences` | Optional, up to 16 `{ sourceId, slot, root }`. Each must be committed in `RECENT_ROOT_ADDRESS` (`0x…8272`) and usable: `1 ≤ head_slot + 1 − slot ≤ 8191`. |
+| `nonce` | Legacy shorthand for `nonceKeys: ["0x0"], nonceSeq: nonce`. Send either this or the pair, not both. |
 
-## 🤝 Shared Mempool (P2P)
+Transactions returned by the RPC (`eth_getFrameTransactionByHash`, `debug_bundler_dumpMempool`)
+carry `nonceKeys`/`nonceSeq`/`recentRootReferences`.
 
-> [!WARNING]  
-> This version of the bundler only supports Entry Point v7, which does not have the p2p mempool yet.
+**Mempool rules.** This alt-mempool deliberately keeps them minimal:
 
+- **Slots.** A linear (`["0x0"]`) transaction occupies `sender:nonceSeq`, as before. A keyed one
+  occupies its exact key set plus `nonceSeq`. A transaction in an occupied slot is a replacement
+  and needs a 10% fee bump.
+- **One pending transaction per `(sender, key)`.** A keyed transaction sharing any key with a
+  pending one in another slot is rejected (`nonce key … is already held by pending transaction …`).
+  Disjoint key sets coexist freely, and linear and keyed transactions of one sender do not block
+  each other.
+- **No per-sender cap on keyed transactions.** They cannot block each other at the nonce level.
+  Linear transactions keep the per-sender limit (4), counted among linear transactions only.
+  Third-party payers and factories are capped as before.
+- **Balances.** Pending transactions never owe an account more than its balance. A payer owes
+  each transaction's maximum gas cost, and a sender owes the `value` of its top-level frames.
+  Checked at admission, and every block (newest entries are dropped first when a balance falls).
+- **Recent roots.** The slot window is checked before simulation, and commitment by the
+  simulation. Entries whose reference expires are evicted each block, and ones about to expire
+  are not relayed. Failures appear under the explorer's `recent-root` rule.
 
-## 🔢 Statistics
-![Alt](https://repobeats.axiom.co/api/embed/4d7ec3ece88b2461c5b1757574321f4f6540cdd5.svg "Skandha analytics image")
+This changes the P2P wire format: see [P2P.md](./P2P.md#wire-format-version).
 
-## 🙏 Acknowledgements
+## Shared mempool (P2P)
 
-- [eth-infinitism](https://github.com/eth-infinitism)
-- [lodestar](https://github.com/ChainSafe/lodestar) 
+Running `./skandha node` instead of `./skandha standalone` joins a libp2p network that gossips
+frame transactions between bundler nodes (gossipsub for propagation, discv5 for peer discovery).
+See [P2P.md](./P2P.md) for a full walkthrough — a boot node, a second node peering with it, and a
+frame transaction propagating by gossip between them.
+
+## Public devnet
+
+A public EIP-8141 devnet is running at `https://altmempool.forshtat.com`, with real mainnet
+contracts (LINK, USDT, BAYC so far) predeployed at fixed addresses for testing against. A second
+Skandha instance, `https://altmempoolgateway.forshtat.com`, gossips transactions to it over p2p, so
+sending to either one tests the network end to end. See
+[devnet-readme.md](./deploy/devnet/devnet-readme.md) for how to connect, and
+[deployments/devnet.md](./deployments/devnet.md) for the canonical addresses and how they were
+deployed.
+
+**[altmempoolexplorer.forshtat.com](https://altmempoolexplorer.forshtat.com/)** is a web explorer
+for both instances: the live mempool, every admission with the rule-by-rule reason a transaction
+was accepted or turned away, and p2p peers — see
+[packages/devnet-ui](./packages/devnet-ui/README.md).
+
+## License
+
+Licensed under the [MIT License](./LICENSE).
+
+## Acknowledgements
+
+This project builds on [Etherspot's Skandha](https://github.com/etherspot/skandha) and its use of
+[lodestar](https://github.com/ChainSafe/lodestar)'s libp2p networking stack, and on tooling from
+[eth-infinitism](https://github.com/eth-infinitism).

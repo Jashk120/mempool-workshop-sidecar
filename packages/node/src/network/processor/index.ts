@@ -27,7 +27,7 @@ type WorkOpts = {
  * in order to process the gossip object.
  */
 const executeGossipWorkOrderObj: Record<GossipType, WorkOpts> = {
-  [GossipType.user_operation]: {},
+  [GossipType.frame_transaction]: {},
 };
 const executeGossipWorkOrder = Object.keys(
   executeGossipWorkOrderObj

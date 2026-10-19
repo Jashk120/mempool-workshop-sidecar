@@ -1,8 +1,23 @@
+/*
+  Wire method names for EIP-8141 frame transactions, matching the
+  executor-side method names in `packages/executor/src/modules/{eth,skandha}.ts`
+  (`sendFrameTransaction`/`estimateFrameTransactionGas`/
+  `getFrameTransactionByHash`/`getFrameTransactionReceipt`/
+  `skandha_frameTransactionStatus`). `eth_supportedEntryPoints`/
+  `skandha_feeHistory` are removed entirely, not renamed - see
+  `packages/executor/src/modules/{eth,skandha}.ts`'s own header comments for
+  why neither has an EIP-8141 analogue.
+*/
 export const CustomRPCMethods = {
   skandha_getGasPrice: "skandha_getGasPrice",
   skandha_config: "skandha_config",
-  skandha_feeHistory: "skandha_feeHistory",
-  skandha_userOperationStatus: "skandha_userOperationStatus",
+  skandha_explorer_info: "skandha_explorer_info",
+  skandha_explorer_listTransactions: "skandha_explorer_listTransactions",
+  skandha_explorer_listAdmissions: "skandha_explorer_listAdmissions",
+  skandha_explorer_getTransaction: "skandha_explorer_getTransaction",
+  skandha_explorer_peers: "skandha_explorer_peers",
+  skandha_explorer_listReputation: "skandha_explorer_listReputation",
+  skandha_frameTransactionStatus: "skandha_frameTransactionStatus",
   skandha_subscribe: "skandha_subscribe",
   skandha_unsubscribe: "skandha_unsubscribe",
   skandha_connectedPeers: "skandha_connectedPeers"
@@ -10,11 +25,10 @@ export const CustomRPCMethods = {
 
 export const BundlerRPCMethods = {
   eth_chainId: "eth_chainId",
-  eth_supportedEntryPoints: "eth_supportedEntryPoints",
-  eth_sendUserOperation: "eth_sendUserOperation",
-  eth_estimateUserOperationGas: "eth_estimateUserOperationGas",
-  eth_getUserOperationReceipt: "eth_getUserOperationReceipt",
-  eth_getUserOperationByHash: "eth_getUserOperationByHash",
+  eth_sendFrameTransaction: "eth_sendFrameTransaction",
+  eth_estimateFrameTransactionGas: "eth_estimateFrameTransactionGas",
+  eth_getFrameTransactionReceipt: "eth_getFrameTransactionReceipt",
+  eth_getFrameTransactionByHash: "eth_getFrameTransactionByHash",
   web3_clientVersion: "web3_clientVersion",
   debug_bundler_clearState: "debug_bundler_clearState",
   debug_bundler_dumpMempool: "debug_bundler_dumpMempool",
@@ -28,6 +42,8 @@ export const BundlerRPCMethods = {
   debug_bundler_getStakeStatus: "debug_bundler_getStakeStatus",
   debug_bundler_clearMempool: "debug_bundler_clearMempool",
   debug_bundler_clearReputation: "debug_bundler_clearReputation",
+  debug_bundler_setPrivilegedRelayTargetBlock:
+    "debug_bundler_setPrivilegedRelayTargetBlock",
 };
 
 export const RedirectedRPCMethods = {

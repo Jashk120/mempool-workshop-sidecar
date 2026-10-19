@@ -1,9 +1,9 @@
-import { TopicValidatorResult } from "@libp2p/interface-pubsub";
 import { getGossipSSZType } from "../gossip/topic.js";
 import {
   GossipValidatorFn,
   GossipHandlers,
   GossipHandlerFn,
+  TopicValidatorResult,
 } from "../gossip/interface.js";
 import { GossipActionError } from "../gossip/errors.js";
 
@@ -58,6 +58,8 @@ export function getGossipValidatorFn(
 
       return TopicValidatorResult.Accept;
     } catch (e) {
+      // Any failure, including "Frame transaction already known" (gossip echoing
+      // back what this node holds), is Ignore: the peer is not penalised.
       if (!(e instanceof GossipActionError)) {
         // logger.debug(
         //   `Gossip validation ${type} threw a non-GossipActionError`,

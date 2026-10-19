@@ -8,10 +8,8 @@ RUN bun install --frozen-lockfile && \
   bun run build:all && \
   bun install --production
 
-RUN cd node_modules/bcrypto && bun install
-
 FROM oven/bun:1.2.23-alpine
 WORKDIR /usr/app
 COPY --from=build_src /usr/app .
 
-ENTRYPOINT ["bun", "--bun", "./packages/cli/bin/skandha"]
+ENTRYPOINT ["bun", "--bun", "./packages/cli/bin/skandha.js"]

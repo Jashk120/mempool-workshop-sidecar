@@ -1,8 +1,8 @@
 import { setMaxListeners } from "node:events";
 import { Logger } from "@skandha/api/lib/logger";
 import { Libp2p } from "libp2p";
-import { Connection, Stream } from "@libp2p/interface-connection";
-import { PeerId } from "@libp2p/interface-peer-id";
+import { Connection, Stream } from "@libp2p/interface";
+import { PeerId } from "@libp2p/interface";
 import {
   DialOnlyProtocolDefinition,
   Encoding,

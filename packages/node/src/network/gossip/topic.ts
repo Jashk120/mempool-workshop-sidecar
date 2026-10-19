@@ -1,4 +1,4 @@
-import { ssz } from "@skandha/types/lib/index.js";
+import { VerifiedFrameTx as VerifiedFrameTxSsz } from "@skandha/types/lib/node/frameTx.js";
 import {
   GossipEncoding,
   GossipTopic,
@@ -54,15 +54,15 @@ export function stringifyGossipTopic(topic: GossipTopic): string {
  */
 function stringifyGossipTopicType(topic: GossipTopic): string {
   switch (topic.type) {
-    case GossipType.user_operation:
+    case GossipType.frame_transaction:
       return topic.type;
   }
 }
 
-export function getGossipSSZType(topic: GossipTopic): typeof ssz.VerifiedUserOperation {
+export function getGossipSSZType(topic: GossipTopic): typeof VerifiedFrameTxSsz {
   switch (topic.type) {
-    case GossipType.user_operation:
-      return ssz.VerifiedUserOperation;
+    case GossipType.frame_transaction:
+      return VerifiedFrameTxSsz;
   }
 }
 
@@ -92,7 +92,7 @@ export function parseGossipTopic(topicStr: string): Required<GossipTopic> {
 
     // Inline-d the parseGossipTopicType() function since spreading the resulting object x4 the time to parse a topicStr
     switch (gossipTypeStr) {
-      case GossipType.user_operation:
+      case GossipType.frame_transaction:
         return { type: gossipTypeStr, encoding, mempool };
     }
 
@@ -108,7 +108,7 @@ export function parseGossipTopic(topicStr: string): Required<GossipTopic> {
 export function getCoreTopics(): GossipTopicTypeMap[keyof GossipTopicTypeMap][] {
   // Common topics
   const topics: GossipTopicTypeMap[keyof GossipTopicTypeMap][] = [
-    { type: GossipType.user_operation },
+    { type: GossipType.frame_transaction },
   ];
 
   return topics;

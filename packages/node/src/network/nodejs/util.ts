@@ -1,5 +1,5 @@
-import { PeerId } from "@libp2p/interface-peer-id";
-import { ENR, SignableENR } from "@chainsafe/discv5";
+import type { PrivateKey } from "@libp2p/interface";
+import { ENR, SignableENR } from "@chainsafe/enr";
 import logger from "@skandha/api/lib/logger";
 import { Libp2p } from "../interface.js";
 import { Eth2PeerDataStore } from "../peers/datastore.js";
@@ -14,16 +14,16 @@ export type NodeJsLibp2pOpts = {
 
 /**
  *
- * @param peerIdOrPromise Create an instance of NodejsNode asynchronously
+ * @param privateKeyOrPromise Create an instance of NodejsNode asynchronously
  * @param networkOpts
  * @param peerStoreDir
  */
 export async function createNodeJsLibp2p(
-  peerIdOrPromise: PeerId | Promise<PeerId>,
+  privateKeyOrPromise: PrivateKey | Promise<PrivateKey>,
   networkOpts: Partial<INetworkOptions> = {},
   nodeJsLibp2pOpts: NodeJsLibp2pOpts = {}
 ): Promise<Libp2p> {
-  const peerId = await Promise.resolve(peerIdOrPromise);
+  const privateKey = await Promise.resolve(privateKeyOrPromise);
   const localMultiaddrs = networkOpts.localMultiaddrs || [];
   const bootMultiaddrs = networkOpts.bootMultiaddrs || [];
   const enr = networkOpts.discv5?.enr;
@@ -72,7 +72,7 @@ export async function createNodeJsLibp2p(
   }
 
   return _createNodejsLibp2p({
-    peerId,
+    privateKey,
     addresses: { listen: localMultiaddrs },
     datastore,
     bootMultiaddrs: bootMultiaddrs,

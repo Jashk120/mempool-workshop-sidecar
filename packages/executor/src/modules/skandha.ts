@@ -1,39 +1,43 @@
 import { Logger } from "@skandha/types/lib/index.js";
 import {
   GetConfigResponse,
-  GetFeeHistoryResponse,
   GetGasPriceResponse,
 } from "@skandha/types/lib/api/interfaces";
 import RpcError from "@skandha/types/lib/api/errors/rpc-error";
 import * as RpcErrorCodes from "@skandha/types/lib/api/errors/rpc-error-codes.js";
 import { GasPriceMarkupOne } from "@skandha/params/lib/index.js";
 import { getGasFee } from "@skandha/params/lib/index.js";
-import { UserOperationStatus } from "@skandha/types/lib/api/interfaces";
 import { MempoolEntryStatus } from "@skandha/types/lib/executor";
-import { UserOperation } from "@skandha/types/lib/contracts/UserOperation";
-import {
-  Hex,
-  PublicClient,
-  decodeFunctionData,
-  formatEther,
-  parseAbiItem,
-} from "viem";
-import { PackedUserOperation } from "@skandha/types/src/contracts/UserOperation";
+import { PublicClient, formatEther } from "viem";
 import { GetNodeAPI, NetworkConfig } from "../interfaces.js";
 import { Config } from "../config.js";
-import { EntryPointService, MempoolService } from "../services/index.js";
-import { EntryPointVersion } from "../services/EntryPointService/interfaces.js";
-import { unpackUserOp } from "../services/EntryPointService/utils/index.js";
+import { MempoolService } from "../services/index.js";
+import { FrameTransactionStatus } from "./interfaces.js";
 
-type BigNumberish = bigint | number | `0x${string}` | `${number}` | string;
-
-// custom features of Skandha
+/**
+ * EIP-8141 frame-transaction adaptation of Skandha's custom RPC surface.
+ *
+ * No `getFeeHistory`: it used to reconstruct historical
+ * `maxFeePerGas`/`maxPriorityFeePerGas` averages by filtering
+ * `UserOperationEvent` logs emitted by EntryPoint's `handleOps`
+ * transactions, then ABI-decoding those transactions' calldata back into
+ * `PackedUserOperation[]`. None of that has an EIP-8141 analogue: there is
+ * no multi-EntryPoint-version dispatch (a single fixed `ENTRY_POINT`
+ * sentinel), no `handleOps` call to decode (a frame transaction is a plain,
+ * protocol-native transaction, not a contract call), and no
+ * `UserOperationEvent` log to filter for (EIP-8141 receipts are
+ * protocol-native, not event-log-based). Equivalent "historical gas paid by
+ * transactions in a block range" analytics would need a new block-range
+ * frame-transaction scanner (`ReceiptService` only looks up one
+ * already-known hash) - a documented capability gap, not a silent
+ * regression, matching `eth.ts`'s own precedent for similarly-unported
+ * functionality.
+ */
 export class Skandha {
   networkConfig: NetworkConfig;
 
   constructor(
     private mempoolService: MempoolService,
-    private entryPointService: EntryPointService,
     private chainId: number,
     private publicClient: PublicClient,
     private config: Config,
@@ -117,16 +121,17 @@ export class Skandha {
       gasPriceMarkup: this.networkConfig.gasPriceMarkup,
       enforceGasPrice: this.networkConfig.enforceGasPrice,
       enforceGasPriceThreshold: this.networkConfig.enforceGasPriceThreshold,
+      eip1559: this.networkConfig.eip1559,
       eip2930: this.networkConfig.eip2930,
       useropsTTL: this.networkConfig.useropsTTL,
       whitelistedEntities: this.networkConfig.whitelistedEntities,
       bundleGasLimitMarkup: this.networkConfig.bundleGasLimitMarkup,
-      relayingMode: this.networkConfig.relayingMode,
+      maxConcurrentSubmissions: this.networkConfig.maxConcurrentSubmissions,
       bundleInterval: this.networkConfig.bundleInterval,
       pollingInterval: this.networkConfig.pollingInterval,
-      waitForConfirmationInterval: this.networkConfig.waitForConfirmationInterval,
+      maxSubmitAttempts: this.networkConfig.maxSubmitAttempts,
       bundleSize: this.networkConfig.bundleSize,
-      canonicalMempoolId: this.networkConfig.canonicalMempoolId,
+      standardMempoolId: this.networkConfig.standardMempoolId,
       canonicalEntryPoint: this.networkConfig.canonicalEntryPoint,
       supportedMempools: this.networkConfig.supportedMempools,
       gasFeeInSimulation: this.networkConfig.gasFeeInSimulation,
@@ -136,7 +141,6 @@ export class Skandha {
       vglMarkup: this.networkConfig.vglMarkup,
       paymasterVglMarkup: this.networkConfig.paymasterVglMarkup,
       paymasterPoglMarkup: this.networkConfig.paymasterPoglMarkup,
-      fastlaneValidators: this.networkConfig.fastlaneValidators,
       estimationGasLimit: this.networkConfig.estimationGasLimit,
       archiveDuration: this.networkConfig.archiveDuration,
       pvgMarkupPercent: this.networkConfig.pvgMarkupPercent,
@@ -146,117 +150,39 @@ export class Skandha {
       paymasterPoglMarkupPercent: this.networkConfig.paymasterPoglMarkupPercent,
       userOpGasLimit: this.networkConfig.userOpGasLimit,
       bundleGasLimit: this.networkConfig.bundleGasLimit,
-      merkleApiURL: this.networkConfig.merkleApiURL,
       blockscoutUrl: this.networkConfig.blockscoutUrl,
       blockscoutApiKeys: this.networkConfig.blockscoutApiKeys.length,
       tenderlyApiUrl: this.networkConfig.tenderlyApiUrl ? true : false,
       tenderlyKey: this.networkConfig.tenderlyKey ? true : false,
       tenderlySave: this.networkConfig.tenderlySave,
       rpcTimeout: this.networkConfig.rpcTimeout,
-      eip7702: this.networkConfig.eip7702,
       disableWatchContract: this.networkConfig.disableWatchContract,
       epSimulationsContract: this.networkConfig.epSimulationsContract,
       pimlicoSimulationsContract: this.networkConfig.pimlicoSimulationsContract,
       binarySearchMaxRetries: this.networkConfig.binarySearchMaxRetries,
-      nativeTracer: this.networkConfig.nativeTracer,
       precompiles: this.networkConfig.precompiles,
       relayOpsWithWhitelistedEntities: this.networkConfig.relayOpsWithWhitelistedEntities,
+      stakingRegistryAddress: this.networkConfig.stakingRegistryAddress,
     };
   }
 
   /**
-   * see eth_feeHistory
-   * @param entryPoint Entry Point contract
-   * @param blockCount Number of blocks in the requested range
-   * @param newestBlock Highest number block of the requested range, or "latest"
+   * `sender`/`payer`/`factory`/`tx` are resolved by `FrameTxMempoolEntry`'s
+   * validation-prefix parsing - there is no `entryPoint` concept for an
+   * EIP-8141 frame transaction.
    */
-  async getFeeHistory(
-    entryPoint: Hex,
-    blockCount: BigNumberish,
-    newestBlock: BigNumberish
-  ): Promise<GetFeeHistoryResponse> {
-    const toBlockInfo =
-      newestBlock === "latest"
-        ? await this.publicClient.getBlock()
-        : await this.publicClient.getBlock({
-            blockNumber: BigInt(newestBlock),
-          });
-    const fromBlockNumber = toBlockInfo.number - BigInt(blockCount);
-    const epVersion = this.entryPointService.getEntryPointVersion(entryPoint);
-    if (
-      epVersion === EntryPointVersion.SIX ||
-      epVersion === EntryPointVersion.SEVEN
-    ) {
-      const contract =
-        this.entryPointService.getEntryPoint(entryPoint).contract;
-      const events = await this.publicClient.getLogs({
-        address: entryPoint,
-        events: [
-          parseAbiItem([
-            "event UserOperationEvent(bytes32 indexed userOpHash, address indexed sender, address indexed paymaster, uint256 nonce, bool success, uint256 actualGasCost, uint256 actualGasUsed)",
-          ]),
-        ],
-        fromBlock: fromBlockNumber,
-        toBlock: toBlockInfo.number,
-      });
-      const txReceipts = await Promise.all(
-        events.map((event) =>
-          this.publicClient.getTransaction({
-            hash: event.transactionHash,
-          })
-        )
-      );
-      const txDecoded = txReceipts
-        .map((receipt) => {
-          try {
-            return decodeFunctionData({
-              abi: contract.abi,
-              data: receipt.input,
-            });
-          } catch (err) {
-            this.logger.error(err);
-            return null;
-          }
-        })
-        .filter((el) => el !== null);
-
-      const actualGasPrice = events.map((event) => {
-        return event.args.actualGasCost! / event.args.actualGasUsed!;
-      });
-
-      const userOps: UserOperation[] = [];
-      for (const handleOps of txDecoded) {
-        const packedUserOps: PackedUserOperation[] | undefined = handleOps
-          ?.args?.[0] as PackedUserOperation[] | undefined;
-        if (packedUserOps != null) {
-          for (const packedUserOp of packedUserOps) {
-            userOps.push(unpackUserOp(packedUserOp));
-          }
-        }
-      }
-
-      return {
-        actualGasPrice,
-        maxFeePerGas: userOps.map((userop) => userop.maxFeePerGas),
-        maxPriorityFeePerGas: userOps.map(
-          (userop) => userop.maxPriorityFeePerGas
-        ),
-      };
-    }
-
-    throw new RpcError("Unsupported EntryPoint");
-  }
-
-  async getUserOperationStatus(hash: string): Promise<UserOperationStatus> {
+  async getFrameTransactionStatus(
+    hash: string
+  ): Promise<FrameTransactionStatus> {
     const entry = await this.mempoolService.getEntryByHash(hash);
     if (entry == null) {
       throw new RpcError(
-        "UserOperation not found",
+        "Frame transaction not found",
         RpcErrorCodes.INVALID_REQUEST
       );
     }
 
-    const { userOp, entryPoint } = entry;
+    const { tx, sender, payer, factory } = entry;
     const status =
       Object.keys(MempoolEntryStatus).find(
         (status) =>
@@ -267,8 +193,10 @@ export class Skandha {
     const transaction = entry.actualTransaction ?? entry.transaction;
 
     return {
-      userOp,
-      entryPoint,
+      tx,
+      sender,
+      payer,
+      factory,
       status,
       reason,
       transaction,

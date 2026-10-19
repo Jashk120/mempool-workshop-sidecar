@@ -6,7 +6,7 @@ import { Web3, Debug, Eth } from "../../src/modules";
 import { getServices } from "./services";
 
 export async function getModules(config: Config, networkConfig: NetworkConfig) {
-  const provider = config.getNetworkProvider()!;
+  const publicClient = config.getPublicClient();
   const {
     reputationService,
     userOpValidationService,
@@ -21,7 +21,7 @@ export async function getModules(config: Config, networkConfig: NetworkConfig) {
     commit: "commit",
   });
   const debug = new Debug(
-    provider,
+    publicClient,
     entryPointService,
     bundlingService,
     mempoolService,
@@ -30,7 +30,7 @@ export async function getModules(config: Config, networkConfig: NetworkConfig) {
   );
   const eth = new Eth(
     ChainId,
-    provider,
+    publicClient,
     entryPointService,
     userOpValidationService,
     mempoolService,

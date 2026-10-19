@@ -1,9 +1,9 @@
-import { PeerId } from "@libp2p/interface-peer-id";
+import { PeerId } from "@libp2p/interface";
 import { Server } from "@skandha/api/lib/server.js";
 import { ApiApp } from "@skandha/api/lib/app.js";
 import { Config } from "@skandha/executor/lib/config.js";
 import { IDbController } from "@skandha/types/lib/index.js";
-import { SignableENR } from "@chainsafe/discv5";
+import { SignableENR } from "@chainsafe/enr";
 import { INodeAPI } from "@skandha/types/lib/node";
 import { Executor } from "@skandha/executor/lib/executor.js";
 import logger from "@skandha/api/lib/logger.js";
@@ -79,7 +79,8 @@ export class BundlerNode {
 
     if (!peerId) {
       const enr = nodeOptions.network.discv5?.enr as SignableENR;
-      peerId = await enr.peerId();
+      // discv5 (12.x) exposes ENR#peerId as a synchronous getter.
+      peerId = enr.peerId;
     }
 
     let executor: Executor;

@@ -1,5 +1,6 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { IDbController } from "@skandha/types/lib/index.js";
+import { replaceBigints, reviveBigints } from "./bigintJson.js";
 
 enum Status {
   started = "started",
@@ -24,7 +25,7 @@ export class LocalDbController implements IDbController {
       throw new Error("Not Found");
     }
     try {
-      return JSON.parse(value as string);
+      return JSON.parse(value as string, reviveBigints);
     } catch (_) {
       return value as T;
     }
@@ -33,9 +34,7 @@ export class LocalDbController implements IDbController {
   // eslint-disable-next-line @typescript-eslint/ban-types
   async put(key: string, value: Object): Promise<void> {
     key = `${this.namespace}:${key}`;
-    this.db[key] = JSON.stringify(value, (_, value) =>
-      typeof value === "bigint" ? "0x" + value.toString(16) : value
-    )
+    this.db[key] = JSON.stringify(value, replaceBigints)
   }
 
   async del(key: string): Promise<void> {
@@ -51,7 +50,7 @@ export class LocalDbController implements IDbController {
         throw new Error("Not Found");
       }
       try {
-        return JSON.parse(value as string);
+        return JSON.parse(value as string, reviveBigints);
       } catch (_) {
         return value as T;
       }

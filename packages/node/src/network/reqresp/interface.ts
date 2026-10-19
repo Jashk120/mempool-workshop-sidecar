@@ -1,19 +1,26 @@
-import { PeerId } from "@libp2p/interface-peer-id";
+import { ValueOf } from "@chainsafe/ssz";
+import { PeerId } from "@libp2p/interface";
 import { ts } from "@skandha/types/lib/index.js";
+import {
+  PooledFrameTxHashesRequest as PooledFrameTxHashesRequestSsz,
+  PooledFrameTxHashes as PooledFrameTxHashesSsz,
+  PooledFrameTxsByHashRequest as PooledFrameTxsByHashRequestSsz,
+  PooledFrameTxsByHash as PooledFrameTxsByHashSsz,
+} from "@skandha/types/lib/node/frameTx.js";
 
 export interface IReqRespNode {
   status(peerId: PeerId, request: ts.Status): Promise<ts.Status>;
   goodbye(peerId: PeerId, request: ts.Goodbye): Promise<void>;
   ping(peerId: PeerId): Promise<ts.Ping>;
   metadata(peerId: PeerId): Promise<ts.Metadata>;
-  pooledUserOpHashes(
+  pooledFrameTxHashes(
     peerId: PeerId,
-    req: ts.PooledUserOpHashesRequest
-  ): Promise<ts.PooledUserOpHashes>;
-  pooledUserOpsByHash(
+    req: ValueOf<typeof PooledFrameTxHashesRequestSsz>
+  ): Promise<ValueOf<typeof PooledFrameTxHashesSsz>>;
+  pooledFrameTxsByHash(
     peerId: PeerId,
-    req: ts.PooledUserOpsByHashRequest
-  ): Promise<ts.PooledUserOpsByHash>;
+    req: ValueOf<typeof PooledFrameTxsByHashRequestSsz>
+  ): Promise<ValueOf<typeof PooledFrameTxsByHashSsz>>;
 }
 
 /**

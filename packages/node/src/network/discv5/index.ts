@@ -1,20 +1,11 @@
 import EventEmitter from "events";
-import { PeerId } from "@libp2p/interface-peer-id";
 import StrictEventEmitter from "strict-event-emitter-types";
-import { exportToProtobuf } from "@libp2p/peer-id-factory";
-import {
-  createKeypairFromPeerId,
-  ENR,
-  ENRData,
-  IDiscv5DiscoveryInputOptions,
-  IKeypair,
-  SignableENR,
-} from "@chainsafe/discv5";
+import { ENR, ENRData, SignableENR } from "@chainsafe/enr";
+import { IDiscv5DiscoveryInputOptions } from "@chainsafe/discv5";
 import { spawn, Thread, Worker } from "@chainsafe/threads";
 import { Discv5WorkerApi, Discv5WorkerData } from "./types.js";
 
 export type Discv5Opts = {
-  peerId: PeerId;
   discv5: Omit<
     IDiscv5DiscoveryInputOptions,
     "metrics" | "searchInterval" | "enabled"
@@ -42,32 +33,25 @@ export class Discv5Worker extends (EventEmitter as {
 }) {
   // private logger: Logger;
   private status: Discv5WorkerStatus;
-  private keypair: IKeypair;
 
   constructor(private opts: Discv5Opts) {
     super();
 
     // this.logger = opts.logger;
     this.status = { status: "stopped" };
-    this.keypair = createKeypairFromPeerId(this.opts.peerId);
   }
 
   async start(): Promise<void> {
     if (this.status.status === "started") return;
 
-    this.keypair = createKeypairFromPeerId(
-      await (this.opts.discv5.enr as SignableENR).peerId()
-    );
-
     const bootEnrs = (this.opts.discv5.bootEnrs as string[]) || [];
 
     const workerData = {
+      // SignableENRData already carries the raw private key, so the worker
+      // thread can fully reconstruct the SignableENR without a separate
+      // peerId/keypair handoff (unlike the pre-1.x discv5 API).
       enr: (this.opts.discv5.enr as SignableENR).toObject(),
-      peerIdProto: exportToProtobuf(
-        //this.opts.peerId
-        await (this.opts.discv5.enr as SignableENR).peerId()
-      ),
-      bindAddr: this.opts.discv5.bindAddr,
+      bindAddrs: this.opts.discv5.bindAddrs,
       config: this.opts.discv5,
       bootEnrs: JSON.stringify(bootEnrs),
     };
@@ -107,7 +91,7 @@ export class Discv5Worker extends (EventEmitter as {
   async enr(): Promise<SignableENR> {
     if (this.status.status === "started") {
       const obj = await this.status.workerApi.enr();
-      return new SignableENR(obj.kvs, obj.seq, this.keypair);
+      return SignableENR.fromObject(obj);
     } else {
       throw new Error("Cannot get enr before module is started");
     }

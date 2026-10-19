@@ -24,8 +24,18 @@ export const GOODBYE_KNOWN_CODES: Record<string, string> = {
   251: "Peer banned this node",
 };
 
-/** Until js-libp2p types its events */
+/**
+ * Until js-libp2p types its events.
+ *
+ * These are intentionally `connection:open`/`connection:close`, not
+ * `peer:connect`/`peer:disconnect`: at @libp2p/interface@2.11.0,
+ * `peer:connect`/`peer:disconnect` deliver a bare `CustomEvent<PeerId>`,
+ * while `connection:open`/`connection:close` deliver `CustomEvent<Connection>`
+ * - which is what peerManager.ts's handlers actually need (`.direction`,
+ * `.status`, `.remotePeer`) and may legitimately fire more than once per
+ * peer, matching this module's own comments about multiple connect events.
+ */
 export enum Libp2pEvent {
-  peerConnect = "peer:connect",
-  peerDisconnect = "peer:disconnect",
+  peerConnect = "connection:open",
+  peerDisconnect = "connection:close",
 }

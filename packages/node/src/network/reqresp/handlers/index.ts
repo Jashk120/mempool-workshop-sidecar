@@ -4,16 +4,16 @@ import { AllChainsMetrics } from "@skandha/monitoring/lib/index.js";
 import * as protocols from "../../../reqresp/protocols/index.js";
 import { HandlerTypeFromMessage } from "../../../reqresp/types.js";
 import { onStatus } from "./status.js";
-import { onPooledUserOpHashes } from "./pooledUserOpHashes.js";
-import { onPooledUserOpsByHash } from "./pooledUserOpsByHash.js";
+import { onPooledFrameTxHashes } from "./pooledFrameTxHashes.js";
+import { onPooledFrameTxsByHash } from "./pooledFrameTxsByHash.js";
 
 export interface ReqRespHandlers {
   onStatus: HandlerTypeFromMessage<typeof protocols.Status>;
-  onPooledUserOpHashes: HandlerTypeFromMessage<
-    typeof protocols.PooledUserOpHashes
+  onPooledFrameTxHashes: HandlerTypeFromMessage<
+    typeof protocols.PooledFrameTxHashes
   >;
-  onPooledUserOpsByHash: HandlerTypeFromMessage<
-    typeof protocols.PooledUserOpsByHash
+  onPooledFrameTxsByHash: HandlerTypeFromMessage<
+    typeof protocols.PooledFrameTxsByHash
   >;
 }
 
@@ -26,11 +26,11 @@ export function getReqRespHandlers(
     async *onStatus() {
       yield* onStatus(config);
     },
-    async *onPooledUserOpHashes(req) {
-      yield* onPooledUserOpHashes(executor, config, req);
+    async *onPooledFrameTxHashes(req) {
+      yield* onPooledFrameTxHashes(executor, config, req);
     },
-    async *onPooledUserOpsByHash(req) {
-      yield* onPooledUserOpsByHash(executor, config, req, metrics);
+    async *onPooledFrameTxsByHash(req) {
+      yield* onPooledFrameTxsByHash(executor, config, req, metrics);
     },
   };
 }

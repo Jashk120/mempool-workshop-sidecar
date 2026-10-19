@@ -1,11 +1,9 @@
 import logger from "@skandha/api/lib/logger";
-import { PeerId } from "@libp2p/interface-peer-id";
+import { PeerId } from "@libp2p/interface";
 import { ts } from "@skandha/types/lib/index.js";
 import { deserializeMempoolId, isMempoolIdEqual } from "@skandha/params/lib/index.js";
-import {
-  deserializeUserOp,
-  userOpHashToString,
-} from "@skandha/params/lib/utils/userOp";
+import { userOpHashToString } from "@skandha/params/lib/utils/userOp";
+import { deserializeFrameTx } from "@skandha/params/lib/utils/frameTx";
 import { AllChainsMetrics } from "@skandha/monitoring/lib/index.js";
 import { Executor } from "@skandha/executor/lib/executor";
 import { Config } from "@skandha/executor/lib/config";
@@ -146,16 +144,20 @@ export class SyncService implements ISyncService {
           const hashes: Uint8Array[] = [];
           let cursor = BigInt(0);
 
+          // Pages until the peer signals no more (`next_cursor: 0`, see
+          // `onPooledFrameTxHashes`'s handler) - a peer with more than one
+          // page's worth of New entries (MAX_OPS_PER_REQUEST) needs more
+          // than one round-trip to be fully sync'd.
           // eslint-disable-next-line no-constant-condition
           while (true) {
-            const response = await this.network.pooledUserOpHashes(peerId, {
+            const response = await this.network.pooledFrameTxHashes(peerId, {
               cursor,
             });
             hashes.push(...response.hashes);
-            if (response.next_cursor) {
-              cursor = response.next_cursor;
+            if (!response.next_cursor) {
+              break;
             }
-            break;
+            cursor = response.next_cursor;
           }
 
           if (!hashes.length) {
@@ -170,9 +172,10 @@ export class SyncService implements ISyncService {
 
           const missingHashes: Uint8Array[] = [];
           for (const hash of hashes) {
-            const exists = await this.executor.p2pService.userOpByHash(
-              userOpHashToString(hash)
-            );
+            const exists =
+              (await this.executor.mempoolService.getEntryByHash(
+                userOpHashToString(hash)
+              )) != null;
             if (!exists) {
               missingHashes.push(hash);
             }
@@ -183,24 +186,44 @@ export class SyncService implements ISyncService {
             continue; // try next supported mempool for this peer
           }
 
-          const sszUserOps = await this.network.pooledUserOpsByHash(peerId, {
+          const frameTxs = await this.network.pooledFrameTxsByHash(peerId, {
             hashes: missingHashes,
           });
 
-          try {
-            for (const sszUserOp of sszUserOps) {
-              const userOp = deserializeUserOp(sszUserOp);
-              await this.executor.eth.sendUserOperation({
-                entryPoint: matchingMempool.entryPoint,
-                userOp,
-              });
-              // if metrics are enabled
+          // Same admission path gossip-received transactions go through
+          // (`handleValidVerifiedFrameTx`, gossipHandlers.ts): deserialize
+          // the SSZ wire shape back into a real FrameTransaction, drop it
+          // (log, don't throw - this is untrusted peer data) if it's not
+          // new/replacing, otherwise hand it to the same
+          // `eth.sendFrameTransaction` every other ingestion path uses.
+          // Each entry is handled independently so one bad transaction from
+          // a peer doesn't abort the rest of the batch.
+          for (const frameTx of frameTxs) {
+            const tx = deserializeFrameTx(frameTx);
+
+            try {
+              await this.executor.mempoolService.validateFrameTxReplaceability(
+                tx
+              );
+            } catch (err) {
+              logger.debug(
+                `[${tx.sender}, [${tx.nonceKeys}]:${tx.nonceSeq}] not new/replacing, skipping: ${err}`
+              );
+              continue;
+            }
+
+            try {
+              const txHash = await this.executor.eth.sendFrameTransaction(
+                tx,
+                `sync:${peerId.toString()}`
+              );
+              logger.debug(`Synced frame tx: ${txHash}`);
               if (this.metrics) {
                 this.metrics[this.executor.chainId].useropsReceived?.inc();
               }
+            } catch (err) {
+              logger.error(`Could not process synced frame tx: ${err}`);
             }
-          } catch (err) {
-            logger.error(err);
           }
         }
       } catch (err) {

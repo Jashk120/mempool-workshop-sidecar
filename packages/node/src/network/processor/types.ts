@@ -1,7 +1,6 @@
-import { PeerId } from "@libp2p/interface-peer-id";
-import { Message } from "@libp2p/interface-pubsub";
+import { PeerId } from "@libp2p/interface";
 import { ts } from "@skandha/types/lib/index.js";
-import { GossipTopic, GossipType } from "../gossip/index.js";
+import { GossipTopic, GossipType, Message } from "../gossip/index.js";
 
 export type GossipAttestationsWork = {
   messages: PendingGossipsubMessage[];

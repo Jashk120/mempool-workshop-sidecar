@@ -2,29 +2,58 @@ import { Mutex } from "async-mutex";
 import { Logger } from "@skandha/types/lib/index.js";
 import { PerChainMetrics } from "@skandha/monitoring/lib/index.js";
 import { MempoolEntryStatus } from "@skandha/types/lib/executor";
-import {
-  Chain,
-  PublicClient,
-  TransactionRequest,
-  zeroAddress,
-  isAddress,
-  RpcAuthorizationList,
-} from "viem";
+import { Chain, Hex, PublicClient } from "viem";
 import { Config } from "../../../config.js";
-import { Bundle, NetworkConfig } from "../../../interfaces.js";
-import { IRelayingMode, Relayer } from "../interfaces.js";
-import { MempoolEntry } from "../../../entities/MempoolEntry.js";
-import { now } from "../../../utils/index.js";
+import { NetworkConfig } from "../../../interfaces.js";
+import { IRelayingMode } from "../interfaces.js";
+import { FrameTxMempoolEntry } from "../../../entities/FrameTxMempoolEntry.js";
 import { MempoolService } from "../../MempoolService/index.js";
 import { ReputationService } from "../../ReputationService.js";
 import { ExecutorEventBus } from "../../SubscriptionService.js";
-import { EntryPointService } from "../../EntryPointService/index.js";
 import { getViemChainDef } from "../utils/chains.js";
 
-const WAIT_FOR_TX_MAX_RETRIES = 120; // 3 blocks
-
+/**
+ * Shared scaffolding for the one relaying strategy (`PrivilegedRelayer`).
+ * This sidecar is not a general-purpose bundler choosing among relay
+ * strategies - it's an outsourced mempool client for one co-located,
+ * trusted ethrex node, so there is exactly one way transactions leave it.
+ *
+ * No `entryPointService`: under EIP-8141 `ENTRY_POINT` is a protocol
+ * constant observed as a frame's caller, not a contract to build calldata
+ * for, so there is no `encodeHandleOps`-equivalent call to make.
+ *
+ * No `selectBeneficiary`: that chose who received a bundle's `handleOps`
+ * refund. A frame transaction pays its own sender's/payer's fees directly;
+ * the bundler is not in the payment path and has no proceeds to direct.
+ *
+ * No `validateBundle`: that was a pre-flight `eth_estimateGas` against the
+ * constructed `{to: entryPoint, data: handleOpsCalldata}` request, useful
+ * because the bundler paid for the batch it assembled, so discovering a
+ * revert before submission saved real money. Relaying costs the bundler
+ * nothing, a type-`0x06` transaction has no `{to, data}` shape to estimate
+ * against, and a genuine frame-tx-aware pre-submission check already runs
+ * upstream at admission time
+ * (`FrameTxSimulationService.simulate`/`ethrex_simulateFrameTransaction`,
+ * called from `eth.ts::sendFrameTransaction`). Re-implementing a weaker,
+ * wrong-shaped version of it here would add nothing.
+ * `networkConfig.skipBundleValidation` is consequently unread by this
+ * service.
+ *
+ * No `handleUserOpFail`: that decoded EntryPoint's `FailedOp(index,
+ * paymaster, reason)` revert to attribute a batch failure to one op among
+ * many. A single relayed transaction needs no attribution, and a transport
+ * failure is not evidence that any particular entity misbehaved - so no
+ * `crashedHandleOps` reputation penalty is applied either. Failures now put
+ * the entry back to `New`; `BundlingService`'s existing `maxSubmitAttempts`
+ * gate cancels it if it keeps failing.
+ *
+ * No bundler wallet pool: the transaction being relayed is already signed
+ * by its own sender, and the privileged ethrex endpoint authenticates
+ * nothing about the caller either (see `PrivilegedRelayer`'s own doc
+ * comment). `mutexes` below is a plain concurrency limiter -
+ * `networkConfig.maxConcurrentSubmissions` slots, not one per signing key.
+ */
 export abstract class BaseRelayer implements IRelayingMode {
-  protected relayers: Relayer[];
   protected mutexes: Mutex[];
   protected viemChain: Chain;
 
@@ -34,16 +63,15 @@ export abstract class BaseRelayer implements IRelayingMode {
     protected publicClient: PublicClient,
     protected config: Config,
     protected networkConfig: NetworkConfig,
-    protected entryPointService: EntryPointService,
     protected mempoolService: MempoolService,
     protected reputationService: ReputationService,
     protected eventBus: ExecutorEventBus,
     protected metrics: PerChainMetrics | null
   ) {
-    const relayers = this.config.getRelayers();
-    if (!relayers) throw new Error("Relayers are not set");
-    this.relayers = [...relayers];
-    this.mutexes = this.relayers.map(() => new Mutex());
+    this.mutexes = Array.from(
+      { length: this.networkConfig.maxConcurrentSubmissions },
+      () => new Mutex()
+    );
     this.viemChain = getViemChainDef(chainId);
   }
 
@@ -51,7 +79,10 @@ export abstract class BaseRelayer implements IRelayingMode {
     return this.mutexes.every((mutex) => mutex.isLocked());
   }
 
-  sendBundle(_bundle: Bundle): Promise<void> {
+  sendFrameTransaction(
+    _entry: FrameTxMempoolEntry,
+    _rawTx: Hex
+  ): Promise<void> {
     throw new Error("Method not implemented.");
   }
 
@@ -59,35 +90,8 @@ export abstract class BaseRelayer implements IRelayingMode {
     return this.mutexes.filter((mutex) => !mutex.isLocked()).length;
   }
 
-  async canSubmitBundle(): Promise<boolean> {
+  async canSubmit(): Promise<boolean> {
     return true;
-  }
-
-  /**
-   * waits entries to get submitted
-   * @param hashes user op hashes array
-   */
-  protected async waitForEntries(entries: MempoolEntry[]): Promise<void> {
-    let retries = 0;
-    if (entries.length == 0) return;
-    return new Promise((resolve, reject) => {
-      const interval = setInterval(async () => {
-        if (retries >= WAIT_FOR_TX_MAX_RETRIES) {
-          clearInterval(interval);
-          return reject(false);
-        }
-        retries++;
-        for (const entry of entries) {
-          const exists = await this.mempoolService.find(entry);
-          // if some entry exists in the mempool, it means that the EventService did not delete it yet
-          // because that service has not received UserOperationEvent yet
-          // so we wait for it to get submitted...
-          if (exists && exists.status < MempoolEntryStatus.OnChain) return;
-        }
-        clearInterval(interval);
-        resolve();
-      }, this.networkConfig.waitForConfirmationInterval);
-    });
   }
 
   protected getAvailableRelayerIndex(): number | null {
@@ -98,180 +102,40 @@ export abstract class BaseRelayer implements IRelayingMode {
     return index;
   }
 
-  protected async handleUserOpFail(
-    entries: MempoolEntry[],
-    err: any
+  /**
+   * A submission that failed in transit says nothing about the transaction's
+   * validity - it was already validated and simulated at admission. Put it
+   * back to `New` so it can be retried; `BundlingService.maxSubmitAttempts`
+   * gives up eventually.
+   */
+  protected async handleSubmissionFailure(
+    entry: FrameTxMempoolEntry,
+    err: unknown
   ): Promise<void> {
-    if (err.errorName !== "FailedOp") {
-      this.logger.error(
-        `Failed handleOps, but non-FailedOp error ${JSON.stringify(
-          err,
-          undefined,
-          2
-        )}`
-      );
-      return;
-    }
-    const { index, paymaster, reason } = err.errorArgs;
-    const failedEntry = entries[index];
-    if (paymaster !== zeroAddress) {
-      await this.reputationService.crashedHandleOps(paymaster);
-    } else if (typeof reason === "string" && reason.startsWith("AA1")) {
-      const factory = failedEntry.factory;
-      if (factory) {
-        await this.reputationService.crashedHandleOps(factory);
-      }
-    } else {
-      // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
-      if (failedEntry) {
-        this.logger.debug(`${failedEntry.hash} reverted on chain. Deleting...`);
-        await this.mempoolService.updateStatus(
-          [failedEntry],
-          MempoolEntryStatus.Reverted,
-          {
-            revertReason: reason,
-          }
-        );
-        this.logger.error(
-          `Failed handleOps sender=${failedEntry.userOp.sender}`
-        );
-      }
-    }
+    this.logger.error(err, `Failed to relay frame transaction ${entry.txHash}`);
+    this.reportFailedSubmission();
+    await this.setNew(entry);
   }
 
   // metrics
-  protected reportSubmittedUserops(txHash: string, bundle: Bundle): void {
-    if (txHash && this.metrics) {
-      this.metrics.bundlesSubmitted.inc(1);
-      this.metrics.useropsSubmitted.inc(bundle.entries.length);
-      this.metrics.useropsInBundle.observe(bundle.entries.length);
-      bundle.entries.forEach((entry) => {
-        this.metrics!.useropsTimeToProcess.observe(
-          Math.ceil(
-            (now() - (entry.submittedTime ?? entry.lastUpdatedTime)) / 1000
-          )
-        );
-      });
-    }
-  }
-
-  protected reportFailedBundle(): void {
+  protected reportFailedSubmission(): void {
     if (this.metrics) {
       this.metrics.bundlesFailed.inc(1);
     }
   }
 
-  /**
-   * determine who should receive the proceedings of the request.
-   * if signer's balance is too low, send it to signer. otherwise, send to configured beneficiary.
-   */
-  protected async selectBeneficiary(relayer: Relayer): Promise<string> {
-    const config = this.config.getNetworkConfig();
-    let beneficiary = this.config.getBeneficiary();
-    if (!beneficiary || !isAddress(beneficiary)) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-asserted-optional-chain
-      return relayer.account?.address!;
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-non-null-asserted-optional-chain
-    const signerAddress = relayer.account?.address!;
-    const currentBalance = await this.publicClient.getBalance({
-      address: signerAddress,
-    });
-
-    if (currentBalance <= config.minSignerBalance || !beneficiary) {
-      beneficiary = signerAddress;
-      this.logger.info(
-        `low balance on ${signerAddress}. using it as beneficiary`
-      );
-    }
-    return beneficiary;
-  }
-
-  /**
-   * calls eth_estimateGas with whole bundle
-   */
-  protected async validateBundle(
-    relayer: Relayer,
-    entries: MempoolEntry[],
-    transactionRequest: TransactionRequest,
-    authorizationList: RpcAuthorizationList = []
-  ): Promise<boolean> {
-    if (this.networkConfig.skipBundleValidation) return true;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { gas: _, ...txWithoutGasLimit } = transactionRequest;
-    try {
-      if (authorizationList.length > 0) {
-        await relayer.request({
-          method: "eth_estimateGas",
-          params: [
-            {
-              to: transactionRequest.to as `0x${string}`,
-              data: transactionRequest.data as `0x${string}`,
-              authorizationList,
-            },
-          ],
-        });
-        return true;
-      }
-      // some chains, like Bifrost, don't allow setting gasLimit in estimateGas
-      await this.publicClient.estimateGas({
-        ...txWithoutGasLimit,
-        maxFeePerGas: undefined,
-        maxPriorityFeePerGas: undefined,
-      });
-      return true;
-    } catch (err) {
-      this.logger.debug(
-        `${entries
-          .map((entry) => entry.userOpHash)
-          .join("; ")} failed on chain estimation. deleting...`
-      );
-      this.logger.error(err);
-      await this.setCancelled(entries, "could not estimate bundle");
-      this.reportFailedBundle();
-      return false;
-    }
-  }
-
   protected async setSubmitted(
-    entries: MempoolEntry[],
+    entry: FrameTxMempoolEntry,
     transaction: string
   ): Promise<void> {
     await this.mempoolService.updateStatus(
-      entries,
+      [entry],
       MempoolEntryStatus.Submitted,
-      {
-        transaction,
-      }
+      { transaction }
     );
   }
 
-  protected async setCancelled(
-    entries: MempoolEntry[],
-    reason: string
-  ): Promise<void> {
-    await this.mempoolService.updateStatus(
-      entries,
-      MempoolEntryStatus.Cancelled,
-      { revertReason: reason }
-    );
-  }
-
-  protected async setReverted(
-    entries: MempoolEntry[],
-    reason: string
-  ): Promise<void> {
-    await this.mempoolService.updateStatus(
-      entries,
-      MempoolEntryStatus.Reverted,
-      {
-        revertReason: reason,
-      }
-    );
-  }
-
-  protected async setNew(entries: MempoolEntry[]): Promise<void> {
-    await this.mempoolService.updateStatus(entries, MempoolEntryStatus.New);
+  protected async setNew(entry: FrameTxMempoolEntry): Promise<void> {
+    await this.mempoolService.updateStatus([entry], MempoolEntryStatus.New);
   }
 }

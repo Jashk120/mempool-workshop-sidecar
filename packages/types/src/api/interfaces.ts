@@ -73,17 +73,18 @@ export type GetConfigResponse = {
   gasPriceMarkup: number;
   enforceGasPrice: boolean;
   enforceGasPriceThreshold: number;
+  eip1559: boolean;
   eip2930: boolean;
   useropsTTL: number;
   whitelistedEntities: IWhitelistedEntities;
   bundleGasLimitMarkup: number;
-  relayingMode: string;
+  maxConcurrentSubmissions: number;
   bundleInterval: number;
   pollingInterval: number;
-  waitForConfirmationInterval: number;
+  maxSubmitAttempts: number;
   bundleSize: number;
   pvgMarkup: number;
-  canonicalMempoolId: string;
+  standardMempoolId: string;
   canonicalEntryPoint: string;
   supportedMempools: Array<{ mempoolId: string; entryPoint: string }>;
   gasFeeInSimulation: boolean;
@@ -92,7 +93,6 @@ export type GetConfigResponse = {
   vglMarkup: number;
   paymasterVglMarkup: number;
   paymasterPoglMarkup: number
-  fastlaneValidators: string[];
   archiveDuration: number;
   estimationGasLimit: number;
   pvgMarkupPercent: number;
@@ -102,20 +102,18 @@ export type GetConfigResponse = {
   paymasterPoglMarkupPercent: number;
   userOpGasLimit: number;
   bundleGasLimit: number;
-  merkleApiURL: string;
   blockscoutUrl: string;
   blockscoutApiKeys: number;
   tenderlyApiUrl: boolean; // true if set
   tenderlyKey: boolean; // true if set
   tenderlySave: boolean;
   rpcTimeout: string;
-  eip7702: boolean;
   disableWatchContract: boolean;
   epSimulationsContract: string;
   pimlicoSimulationsContract: string;
   binarySearchMaxRetries: number;
-  nativeTracer: boolean;
   precompiles: string[];
+  stakingRegistryAddress: string;
   relayOpsWithWhitelistedEntities: boolean
 };
 

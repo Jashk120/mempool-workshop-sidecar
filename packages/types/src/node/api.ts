@@ -1,14 +1,14 @@
 import { ts } from "..";
-import { UserOperationStruct } from "../contracts/EPv6/EntryPoint.js";
+import { FrameTransaction } from "../contracts/FrameTx.js";
 
 export interface INodeAPI {
-  publishVerifiedUserOperation(
-    userOpWithEP: ts.VerifiedUserOperation,
+  publishVerifiedFrameTx(
+    verifiedFrameTx: ts.VerifiedFrameTx,
     mempool: string
   ): Promise<void>;
-  publishVerifiedUserOperationJSON(
+  publishVerifiedFrameTxJSON(
     entryPoint: string,
-    userOp: UserOperationStruct,
+    tx: FrameTransaction,
     blockHash: string,
     mempool: string
   ): Promise<void>;

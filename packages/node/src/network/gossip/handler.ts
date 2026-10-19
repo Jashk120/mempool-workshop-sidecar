@@ -1,4 +1,5 @@
 import { GossipSub, GossipsubEvents } from "@chainsafe/libp2p-gossipsub";
+import type { PrivateKey, PeerId, PeerStore, ComponentLogger } from "@libp2p/interface";
 import logger, { Logger } from "@skandha/api/lib/logger";
 import { ts } from "@skandha/types/lib/index.js";
 import { GOSSIP_MAX_SIZE } from "@skandha/types/lib/sszTypes";
@@ -25,6 +26,36 @@ export type GossipsubModules = {
   metrics: AllChainsMetrics | null;
 };
 
+/**
+ * libp2p 2.x's `Libp2p` class instance carries a `.components` property with
+ * the real internal Registrar/ConnectionManager implementations
+ * (`openConnection()`, `getTopologies()`, etc.) - it just isn't part of the
+ * public `Libp2p` TypeScript interface (see libp2p's own `libp2p.js`:
+ * `this.components = defaultComponents({...})`, then
+ * `this.configureComponent('registrar', ...)` /
+ * `this.configureComponent('connectionManager', ...)`).
+ *
+ * gossipsub 14.x's direct-peer-reconnect and peer-exchange (PX) handling
+ * call `this.components.connectionManager.openConnection(peerId)` and
+ * `this.components.registrar.getTopologies(multicodec)` directly - neither
+ * method exists on the public `Libp2p` instance, so passing it directly (as
+ * an earlier revision of this file did, type-checked only via `any`) leaves
+ * those real mesh-maintenance paths throwing `TypeError` at runtime even
+ * though the happy-path connect/publish/subscribe flow works. Reaching into
+ * the real `.components` object (not just the public instance) fixes this
+ * for real, not just for tsc.
+ */
+type Libp2pWithComponents = {
+  components: {
+    privateKey: PrivateKey;
+    peerId: PeerId;
+    peerStore: PeerStore;
+    logger: ComponentLogger;
+    registrar: unknown;
+    connectionManager: unknown;
+  };
+};
+
 export class BundlerGossipsub extends GossipSub {
   logger: Logger = logger;
 
@@ -34,13 +65,19 @@ export class BundlerGossipsub extends GossipSub {
 
   constructor(modules: GossipsubModules) {
     const gossipTopicCache = new GossipTopicCache();
+    const { components } = modules.libp2p as unknown as Libp2pWithComponents;
     super(
-      {
-        peerId: modules.libp2p.peerId,
-        peerStore: modules.libp2p.peerStore,
-        registrar: modules.libp2p.registrar as any,
-        connectionManager: modules.libp2p.connectionManager as any,
-      },
+      // gossipsub 14.x types its GossipSubComponents against a nested,
+      // older major of @libp2p/interface (2.x, no longer resolvable from
+      // this package's own @libp2p/interface 2.11.0 dependency's exact
+      // instance - see network/gossip/interface.ts) and against
+      // @libp2p/interface-internal's Registrar/ConnectionManager types
+      // (not an explicit dependency of this package), so the object as a
+      // whole still needs a boundary cast - but every field on it below is
+      // now the real internal libp2p component, not the public Libp2p
+      // instance, so the values themselves are correct at runtime (see
+      // Libp2pWithComponents above).
+      components as any,
       {
         globalSignaturePolicy: SignaturePolicy.StrictNoSign,
         dataTransform: new DataTransformSnappy(
@@ -104,17 +141,17 @@ export class BundlerGossipsub extends GossipSub {
     return stringifyGossipTopic(topic);
   }
 
-  async publishVerifiedUserOperation(
-    userOpsWithEP: ts.VerifiedUserOperation,
+  async publishVerifiedFrameTx(
+    verifiedFrameTx: ts.VerifiedFrameTx,
     mempool: string
   ): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    await this.publishObject<GossipType.user_operation>(
+    await this.publishObject<GossipType.frame_transaction>(
       {
-        type: GossipType.user_operation,
+        type: GossipType.frame_transaction,
         mempool,
       },
-      userOpsWithEP
+      verifiedFrameTx
     );
   }
 

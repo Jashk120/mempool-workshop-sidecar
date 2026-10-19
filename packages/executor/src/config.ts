@@ -1,5 +1,6 @@
 // TODO: create a new package "config" instead of this file and refactor
-import { IEntity, RelayingMode } from "@skandha/types/lib/executor/index.js";
+import { IEntity } from "@skandha/types/lib/executor/index.js";
+import { AddressZero } from "@skandha/params/lib/index.js";
 import {
   createPublicClient,
   http,
@@ -19,6 +20,7 @@ export class Config {
   testingMode: boolean;
   unsafeMode: boolean;
   redirectRpc: boolean;
+  explorerEnabled: boolean;
   config: NetworkConfig;
   chainId: number;
   accounts: Hex[] = [];
@@ -28,6 +30,7 @@ export class Config {
     this.testingMode = options.testingMode ?? false;
     this.unsafeMode = options.unsafeMode ?? false;
     this.redirectRpc = options.redirectRpc ?? false;
+    this.explorerEnabled = options.explorer ?? false;
     this.config = this.getDefaultNetworkConfig(options.config);
     this.chainId = 0;
   }
@@ -84,27 +87,20 @@ export class Config {
     return this.config;
   }
 
-  getCanonicalMempool(): { entryPoint: string; mempoolId: string } {
-    return {
-      entryPoint: this.config.canonicalEntryPoint,
-      mempoolId: this.config.canonicalMempoolId,
-    };
-  }
-
   /**
    * Get all supported mempools from config
    * Returns array of {mempoolId, entryPoint} objects
-   * Falls back to canonical mempool if supportedMempools is not configured
+   * Falls back to the standard mempool if supportedMempools is not configured
    */
   getSupportedMempools(): Array<{ mempoolId: string; entryPoint: string }> {
     if (this.config.supportedMempools && this.config.supportedMempools.length > 0) {
       return this.config.supportedMempools;
     }
-    // Fallback to canonical mempool if supportedMempools not configured
-    if (this.config.canonicalMempoolId && this.config.canonicalEntryPoint) {
+    // Fallback to the standard mempool if supportedMempools not configured
+    if (this.config.standardMempoolId && this.config.canonicalEntryPoint) {
       return [
         {
-          mempoolId: this.config.canonicalMempoolId,
+          mempoolId: this.config.standardMempoolId,
           entryPoint: this.config.canonicalEntryPoint,
         },
       ];
@@ -227,6 +223,18 @@ export class Config {
         config.minUnstakeDelay || bundlerDefaultConfigs.minUnstakeDelay
       )
     );
+
+    config.stakingRegistryAddress = fromEnvVar(
+      "STAKING_REGISTRY_ADDRESS",
+      config.stakingRegistryAddress || bundlerDefaultConfigs.stakingRegistryAddress
+    ) as Hex;
+    // Catches a typo/malformed address immediately at startup, rather than
+    // letting it reach StakingRegistryService - which only short-circuits
+    // on the exact zero address (see its own comment on why), so any other
+    // codeless/malformed value would otherwise silently fail every
+    // eth_sendFrameTransaction with a bare "Unexpected behaviour" the first
+    // time a frame transaction actually references a staked entity.
+    getAddress(config.stakingRegistryAddress);
     config.bundleGasLimitMarkup = Number(
       fromEnvVar(
         "BUNDLE_GAS_LIMIT_MARKUP",
@@ -234,11 +242,6 @@ export class Config {
           bundlerDefaultConfigs.bundleGasLimitMarkup
       )
     );
-    config.relayingMode = fromEnvVar(
-      "RELAYING_MODE",
-      config.relayingMode || bundlerDefaultConfigs.relayingMode
-    ) as RelayingMode;
-
     config.bundleInterval = Number(
       fromEnvVar(
         "BUNDLE_INTERVAL",
@@ -246,17 +249,25 @@ export class Config {
       )
     );
 
-    config.waitForConfirmationInterval = Number(
+    config.maxSubmitAttempts = Number(
       fromEnvVar(
-        "WAIT_FOR_CONFIRMATION_INTERVAL",
-        config.waitForConfirmationInterval || bundlerDefaultConfigs.waitForConfirmationInterval
+        "MAX_SUBMIT_ATTEMPTS",
+        config.maxSubmitAttempts || bundlerDefaultConfigs.maxSubmitAttempts
       )
-    )
+    );
 
     config.bundleSize = Number(
       fromEnvVar(
         "BUNDLE_SIZE",
         config.bundleSize || bundlerDefaultConfigs.bundleSize
+      )
+    );
+
+    config.maxConcurrentSubmissions = Number(
+      fromEnvVar(
+        "MAX_CONCURRENT_SUBMISSIONS",
+        config.maxConcurrentSubmissions ||
+          bundlerDefaultConfigs.maxConcurrentSubmissions
       )
     );
 
@@ -267,10 +278,10 @@ export class Config {
       )
     );
 
-    config.canonicalMempoolId = String(
+    config.standardMempoolId = String(
       fromEnvVar(
-        "CANONICAL_MEMPOOL",
-        config.canonicalMempoolId || bundlerDefaultConfigs.canonicalMempoolId
+        "STANDARD_MEMPOOL_ID",
+        config.standardMempoolId || bundlerDefaultConfigs.standardMempoolId
       )
     );
 
@@ -289,12 +300,12 @@ export class Config {
     ))
 
     // Parse supportedMempools from config or env var
-    // If not provided and canonicalMempoolId is set, use canonical as default
+    // If not provided and standardMempoolId is set, use the standard mempool as default
     if (!config.supportedMempools || config.supportedMempools.length === 0) {
-      if (config.canonicalMempoolId && config.canonicalEntryPoint) {
+      if (config.standardMempoolId && config.canonicalEntryPoint) {
         config.supportedMempools = [
           {
-            mempoolId: config.canonicalMempoolId,
+            mempoolId: config.standardMempoolId,
             entryPoint: config.canonicalEntryPoint,
           },
         ];
@@ -302,17 +313,17 @@ export class Config {
         config.supportedMempools = bundlerDefaultConfigs.supportedMempools;
       }
     } else {
-      // Ensure canonical mempool is included in supportedMempools if it's set
-      if (config.canonicalMempoolId && config.canonicalEntryPoint) {
-        const canonicalInSupported = config.supportedMempools.some(
+      // Ensure the standard mempool is included in supportedMempools if it's set
+      if (config.standardMempoolId && config.canonicalEntryPoint) {
+        const standardInSupported = config.supportedMempools.some(
           (mempool) =>
-            mempool.mempoolId === config.canonicalMempoolId &&
+            mempool.mempoolId === config.standardMempoolId &&
             mempool.entryPoint.toLowerCase() === config.canonicalEntryPoint.toLowerCase()
         );
-        if (!canonicalInSupported) {
-          // Add canonical mempool to the beginning of the array
+        if (!standardInSupported) {
+          // Add the standard mempool to the beginning of the array
           config.supportedMempools.unshift({
-            mempoolId: config.canonicalMempoolId,
+            mempoolId: config.standardMempoolId,
             entryPoint: config.canonicalEntryPoint,
           });
         }
@@ -367,20 +378,6 @@ export class Config {
       )
     );
 
-    config.merkleApiURL = String(
-      fromEnvVar(
-        "MERKLE_API_URL",
-        config.merkleApiURL || bundlerDefaultConfigs.merkleApiURL
-      )
-    );
-
-    config.kolibriAuthKey = String(
-      fromEnvVar(
-        "KOLIBRI_AUTH_KEY",
-        config.kolibriAuthKey || bundlerDefaultConfigs.kolibriAuthKey
-      )
-    );
-
     config.cglMarkup = Number(
       fromEnvVar(
         "CGL_MARKUP",
@@ -408,12 +405,6 @@ export class Config {
         config.paymasterPoglMarkup || bundlerDefaultConfigs.paymasterPoglMarkup
       )
     );
-
-    config.fastlaneValidators = fromEnvVar(
-      "FASTLANE_VALIDATOR",
-      config.fastlaneValidators ?? bundlerDefaultConfigs.fastlaneValidators,
-      true
-    ) as string[];
 
     config.archiveDuration = Number(
       fromEnvVar(
@@ -501,10 +492,6 @@ export class Config {
       )
     );
 
-    config.eip7702 = Boolean(
-      fromEnvVar("EIP7702", config.eip7702 || bundlerDefaultConfigs.eip7702)
-    );
-
     config.blockscoutApiKeys = fromEnvVar(
       "BLOCKSCOUT_API_KEYS",
       config.blockscoutApiKeys != undefined
@@ -549,13 +536,6 @@ export class Config {
         "PIMLICO_SIMULATIONS_CONTRACT",
         config.pimlicoSimulationsContract ||
           bundlerDefaultConfigs.pimlicoSimulationsContract
-      )
-    );
-
-    config.nativeTracer = Boolean(
-      fromEnvVar(
-        "NATIVE_TRACER",
-        config.nativeTracer || bundlerDefaultConfigs.nativeTracer
       )
     );
 
@@ -609,6 +589,7 @@ const bundlerDefaultConfigs: BundlerConfig = {
   banSlack: 50,
   minStake: parseEther("0.01"),
   minUnstakeDelay: 0,
+  stakingRegistryAddress: AddressZero,
   minSignerBalance: parseEther("0.1"),
   multicall: "0xcA11bde05977b3631167028862bE2a173976CA11", // default multicall address
   estimationStaticBuffer: 35000,
@@ -631,25 +612,29 @@ const bundlerDefaultConfigs: BundlerConfig = {
   },
   bundleGasLimitMarkup: 25000,
   bundleInterval: 10000, // 10 seconds
-  waitForConfirmationInterval: 1000, // 1 second
+  // How many times MempoolReconciler will requeue a missed submission
+  // before giving up and cancelling the entry. The privileged endpoint tries a
+  // submission against one payload only, and a busy block can leave a valid
+  // transaction out, so one retry (the old default of 1) cancelled
+  // transactions that a third try would have landed.
+  maxSubmitAttempts: 3,
   bundleSize: 4, // max size of bundle (in terms of user ops)
-  relayingMode: "classic",
-  canonicalMempoolId: "",
+  // Bounds how many submissions to the privileged ethrex endpoint can be in
+  // flight at once - there is no wallet pool to size this by any more (the
+  // only relaying strategy signs nothing), so it's a plain number.
+  maxConcurrentSubmissions: 10,
+  standardMempoolId: "",
   canonicalEntryPoint: "",
   supportedMempools: [],
   gasFeeInSimulation: false,
   skipBundleValidation: false,
   userOpGasLimit: 25000000,
   bundleGasLimit: 25000000,
-  merkleApiURL: "https://pool.merkle.io",
-  kolibriAuthKey: "",
   cglMarkup: 0,
   vglMarkup: 0,
   pvgMarkup: 0,
   paymasterVglMarkup: 0,
   paymasterPoglMarkup: 0,
-  echoAuthKey: "",
-  fastlaneValidators: [],
   archiveDuration: 24 * 3600,
   estimationGasLimit: 0,
   pvgMarkupPercent: 0,
@@ -664,13 +649,11 @@ const bundlerDefaultConfigs: BundlerConfig = {
   tenderlyKey: "",
   tenderlySave: true,
   rpcTimeout: "10s",
-  eip7702: false,
   pollingInterval: 3000,
   disableWatchContract: false,
   epSimulationsContract: "",
   pimlicoSimulationsContract: "",
   binarySearchMaxRetries: 3,
-  nativeTracer: false,
   precompiles: [],
   relayOpsWithWhitelistedEntities: false,
 };

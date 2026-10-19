@@ -1,91 +1,46 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { BundlerCollectorReturn } from "@skandha/types/lib/executor";
-import {
-  PublicClient,
-  RpcStateOverride,
-  toHex,
-  TransactionRequest,
-} from "viem";
-import { NativeTracerReturn } from "@skandha/types/lib/executor/validation/nativeTracer";
-import { TracerPrestateResponse } from "../../interfaces.js";
-import { StateOverrides } from "../EntryPointService/interfaces.js";
-import { NetworkConfig } from "../../interfaces.js";
-
-const tracer = readFileSync(
-  resolve(process.cwd(), "packages", "executor", "tracer.js")
-).toString();
-if (tracer == null) {
-  throw new Error("Tracer not found");
-}
-const regexp = /function \w+\s*\(\s*\)\s*{\s*return\s*(\{[\s\S]+\});?\s*\}\s*$/;
-const stringifiedTracer = tracer
-  .match(regexp)![1]
-  .replace(/\r\n/g, "")
-  .replace(/( ){2,}/g, " ");
+import { Hex, PublicClient } from "viem";
+import { EthrexSimulateFrameTransactionResult } from "@skandha/types/lib/executor/validation/ethrexFrameTx.js";
 
 export class GethTracer {
-  constructor(
-    private publicClient: PublicClient,
-    private config: NetworkConfig
-  ) {}
+  constructor(private publicClient: PublicClient) {}
 
-  async debug_traceCall(
-    tx: TransactionRequest,
-    stateOverrides?: RpcStateOverride
-  ): Promise<BundlerCollectorReturn | NativeTracerReturn> {
+  /**
+   * `ethrex_simulateFrameTransaction` - ethrex's (LambdaClass's
+   * `hegota-testnet` branch) real EIP-8141 frame-transaction simulation
+   * RPC. Unlike `debug_traceCall`, this takes the transaction's own raw
+   * canonical encoding directly (see `FrameTxService/codec.ts`'s
+   * `encodeRawFrameTx`) - there is no `TransactionRequest`/ABI-call shape
+   * involved, since a frame transaction's execution semantics are
+   * protocol-native, not a contract call.
+   *
+   * Verified against ethrex's `SimulateFrameTransactionRequest::parse`
+   * (`crates/networking/rpc/ethrex.rs`): `rawTx` must be `0x`-prefixed;
+   * `block` is deliberately never sent as a literal JSON `null` - ethrex's
+   * `BlockIdentifierOrHash::parse` rejects a `null` second param outright
+   * (falls through every match arm to a `BadParams` error), so an absent
+   * `block` here means "default to latest" via an explicit `"latest"`
+   * string, not an explicit null. `{trace}` is always sent as the third
+   * param; `false` there is byte-for-byte the RPC's pre-existing
+   * (pre-tracing) behavior, so callers not needing a trace should still
+   * pass `trace: false` explicitly rather than omitting the param, to keep
+   * this method's own contract simple (always 3 params).
+   *
+   * `GethTracer`'s name is a slight misnomer for this method (it talks to
+   * ethrex, not geth) - kept as-is since this is the sole tracer this
+   * fork's bundler depends on.
+   */
+  async simulateFrameTransaction(
+    rawTx: Hex,
+    trace: boolean,
+    block?: string
+  ): Promise<EthrexSimulateFrameTransactionResult> {
     const payload = {
-      method: "debug_traceCall" as any,
-      params: [
-        {
-          ...tx,
-          gas: toHex(10e8),
-          maxFeePerGas: tx.maxFeePerGas ? toHex(tx.maxFeePerGas) : undefined,
-          maxPriorityFeePerGas: tx.maxPriorityFeePerGas
-            ? toHex(tx.maxPriorityFeePerGas)
-            : undefined,
-        } as any,
-        "latest",
-        {
-          stateOverrides,
-          tracer: this.config.nativeTracer
-            ? "erc7562Tracer"
-            : stringifiedTracer,
-        },
-      ],
+      method: "ethrex_simulateFrameTransaction" as any,
+      params: [rawTx, block ?? "latest", { trace }],
     };
-
-    const ret: any = await this.publicClient.request(payload as any);
-
-    return ret as BundlerCollectorReturn | NativeTracerReturn;
-  }
-
-  async debug_traceCallPrestate(
-    tx: TransactionRequest,
-    stateOverrides?: StateOverrides
-  ): Promise<TracerPrestateResponse> {
-    const { gas: gasLimit, ...txWithoutGasLimit } = tx;
-    const gas = toHex(gasLimit || BigInt(10e6));
-    const ret: any = await this.publicClient.request({
-      method: "debug_traceCall" as any,
-      params: [
-        {
-          ...txWithoutGasLimit,
-          gas,
-          maxFeePerGas: tx.maxFeePerGas ? toHex(tx.maxFeePerGas) : undefined,
-          maxPriorityFeePerGas: tx.maxPriorityFeePerGas
-            ? toHex(tx.maxPriorityFeePerGas)
-            : undefined,
-        } as any,
-        "latest",
-        {
-          tracer: "prestateTracer" as any,
-          stateOverrides,
-        },
-      ],
-    });
-    return ret;
+    return (await this.publicClient.request(
+      payload as any
+    )) as EthrexSimulateFrameTransactionResult;
   }
 }

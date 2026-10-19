@@ -1,28 +1,33 @@
 import RpcError from "@skandha/types/lib/api/errors/rpc-error";
 import * as RpcErrorCodes from "@skandha/types/lib/api/errors/rpc-error-codes.js";
-import { StakeManager__factory } from "@skandha/types/lib/contracts/EPv6/index.js";
 import { MempoolEntryStatus } from "@skandha/types/lib/executor";
-import { UserOperation } from "@skandha/types/lib/contracts/UserOperation";
-import { getContract, Hex, PublicClient } from "viem";
+import { getContract, Hex, keccak256, PublicClient } from "viem";
 import {
   BundlingService,
-  EntryPointService,
   MempoolService,
   ReputationService,
 } from "../services/index.js";
+import { encodeRawFrameTx } from "../services/FrameTxService/codec.js";
 import {
-  MempoolEntrySerialized,
+  FrameTransactionSerialized,
+  FrameTxMempoolEntrySerialized,
   ReputationEntryDump,
 } from "../entities/interfaces.js";
 import { BundlingMode, GetStakeStatus, NetworkConfig } from "../interfaces.js";
 import { SetReputationArgs, SetMempoolArgs } from "./interfaces.js";
 /*
   SPEC: https://eips.ethereum.org/EIPS/eip-4337#rpc-methods-debug-namespace
+
+  There is no `entryPointService`: `getFactory`/`getPaymaster`/
+  `getUserOpHash` used to resolve ERC-4337-specific `initCode`/
+  `paymasterAndData` fields that have no `FrameTransaction` analogue.
+  `FrameTxMempoolEntry` resolves `sender`/`payer`/`factory` itself from the
+  transaction's validation prefix, so `setMempool` doesn't need to compute
+  them by hand.
 */
 export class Debug {
   constructor(
     private publicClient: PublicClient,
-    private entryPointService: EntryPointService,
     private bundlingService: BundlingService,
     private mempoolService: MempoolService,
     private reputationService: ReputationService,
@@ -62,21 +67,21 @@ export class Debug {
   }
 
   /**
-   * Dumps the current UserOperations mempool
-   * array - Array of UserOperations currently in the mempool
+   * Dumps the current frame transactions mempool.
+   * array - Array of (serialized) FrameTransactions currently in the mempool
    */
-  async dumpMempool(): Promise<UserOperation[]> {
+  async dumpMempool(): Promise<FrameTransactionSerialized[]> {
     const entries = await this.mempoolService.dump();
     return entries
       .filter((entry) => entry.status === MempoolEntryStatus.New)
-      .map((entry) => entry.userOp);
+      .map((entry) => entry.tx);
   }
 
   /**
-   * Dumps the current UserOperations mempool
-   * array - Array of UserOperations currently in the mempool
+   * Dumps the current frame transactions mempool (raw, serialized entries).
+   * array - Array of serialized mempool entries currently in the mempool
    */
-  async dumpMempoolRaw(): Promise<MempoolEntrySerialized[]> {
+  async dumpMempoolRaw(): Promise<FrameTxMempoolEntrySerialized[]> {
     const entries = await this.mempoolService.dump();
     return entries.map((entry) => entry);
   }
@@ -91,6 +96,21 @@ export class Debug {
 
   async setBundlingInterval(interval: number): Promise<string> {
     this.bundlingService.setBundlingInverval(interval);
+    return "ok";
+  }
+
+  /**
+   * Test-only admin lever: see `BundlingService.setPrivilegedRelayTargetBlock`/
+   * `PrivilegedRelayer.setTargetBlock`'s own doc comments.
+   */
+  async setPrivilegedRelayTargetBlock(
+    txHash: Hex,
+    targetBlock: Hex
+  ): Promise<string> {
+    this.bundlingService.setPrivilegedRelayTargetBlock(
+      txHash,
+      BigInt(targetBlock)
+    );
     return "ok";
   }
 
@@ -125,65 +145,67 @@ export class Debug {
     return await this.reputationService.dump();
   }
 
+  /**
+   * `FrameTxMempoolEntry` resolves `sender`/`payer`/`factory` itself from
+   * the transaction's own validation prefix, so this doesn't need to
+   * compute them by hand (no `entryPoint`/`getFactory`/`getPaymaster`/
+   * `getUserOpHash` concept for a frame transaction). The transaction hash
+   * is the real EIP-2718 envelope hash (`keccak256(0x06 || rlp(fields))`,
+   * `encodeRawFrameTx`), matching `eth.ts`'s `sendFrameTransaction`
+   * precedent - not `computeSigHash`, which elides signature bytes for
+   * pre-signature signing use only. Per-role `StakeInfo` is intentionally
+   * omitted (`addFrameTx(tx, txHash)`, no 3rd-6th args): this endpoint
+   * explicitly bypasses simulation/validation ("without simulation" is this
+   * method's whole point), so there is no simulated trace to derive
+   * `StakeInfo` from here either - same documented gap `addFrameTx`'s own
+   * doc comment already covers.
+   */
   async setMempool(mempool: SetMempoolArgs): Promise<string> {
-    const { entryPoint, userOps } = mempool;
+    const { txs } = mempool;
     await this.mempoolService.clearState();
     // Loop through the array and persist to the local mempool without simulation.
-    for (const userOp of userOps) {
-      const [factory, paymaster] = [
-        this.entryPointService.getFactory(entryPoint, userOp),
-        this.entryPointService.getPaymaster(entryPoint, userOp),
-      ];
-      const userOpHash = await this.entryPointService.getUserOpHash(
-        entryPoint as Hex,
-        userOp
-      );
-      await this.mempoolService.addUserOp(
-        userOp,
-        entryPoint,
-        0x0,
-        {
-          addr: userOp.sender,
-          stake: 0,
-          unstakeDelaySec: 0,
-        },
-        factory
-          ? {
-              addr: factory,
-              stake: 0,
-              unstakeDelaySec: 0,
-            }
-          : undefined,
-        paymaster
-          ? {
-              addr: paymaster,
-              stake: 0,
-              unstakeDelaySec: 0,
-            }
-          : undefined,
-        undefined,
-        userOpHash,
-        undefined
-      );
+    for (const tx of txs) {
+      const txHash = keccak256(encodeRawFrameTx(tx));
+      await this.mempoolService.addFrameTx(tx, txHash);
     }
     return "ok";
   }
 
   async getStakeStatus(address: Hex, entryPoint: Hex): Promise<GetStakeStatus> {
+    // Same minimal ABI as StakingRegistryService's own getDepositInfo call.
     const sm = getContract({
-      abi: StakeManager__factory.abi,
+      abi: [
+        {
+          type: "function",
+          name: "getDepositInfo",
+          stateMutability: "view",
+          inputs: [{ name: "account", type: "address" }],
+          outputs: [
+            { name: "stake", type: "uint256" },
+            { name: "unstakeDelaySec", type: "uint32" },
+            { name: "withdrawTime", type: "uint64" },
+          ],
+        },
+      ] as const,
       address: entryPoint,
       client: this.publicClient,
     });
-    const info = await sm.read.getDepositInfo([address]);
+    // getContract().read on a plain (non-typechain) ABI returns a
+    // positional tuple, not named properties - matches
+    // StakingRegistryService's own getDepositInfo call.
+    const [stake, unstakeDelaySec, withdrawTime] = (await sm.read.getDepositInfo([
+      address,
+    ])) as unknown as [bigint, number, bigint];
     const isStaked =
-      info.stake >= this.networkConfig.minStake &&
-      info.unstakeDelaySec >= this.networkConfig.minUnstakeDelay;
+      stake >= this.networkConfig.minStake &&
+      unstakeDelaySec >= this.networkConfig.minUnstakeDelay &&
+      withdrawTime === BigInt(0);
     return {
       stakeInfo: {
         addr: address,
-        stake: info.stake.toString(),
-        unstakeDelaySec: info.unstakeDelaySec.toString(),
+        stake: stake.toString(),
+        unstakeDelaySec: unstakeDelaySec.toString(),
+        withdrawTime: withdrawTime.toString(),
       },
       isStaked,
     };

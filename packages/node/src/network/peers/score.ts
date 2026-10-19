@@ -1,4 +1,4 @@
-import { PeerId } from "@libp2p/interface-peer-id";
+import { PeerId } from "@libp2p/interface";
 import { MapDef, pruneSetToMax } from "@skandha/utils/lib";
 import {
   gossipScoreThresholds,

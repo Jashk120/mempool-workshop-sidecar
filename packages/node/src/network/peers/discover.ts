@@ -1,7 +1,8 @@
-import { PeerId } from "@libp2p/interface-peer-id";
+import { PeerId } from "@libp2p/interface";
 import { Multiaddr } from "@multiformats/multiaddr";
-import { PeerInfo } from "@libp2p/interface-peer-info";
-import { ENR, IDiscv5DiscoveryInputOptions } from "@chainsafe/discv5";
+import { PeerInfo } from "@libp2p/interface";
+import { ENR } from "@chainsafe/enr";
+import { IDiscv5DiscoveryInputOptions } from "@chainsafe/discv5";
 import Logger from "@skandha/api/lib/logger";
 import { pruneSetToMax, sleep } from "@skandha/utils/lib";
 import { ssz } from "@skandha/types/lib/index.js";
@@ -9,7 +10,7 @@ import { Libp2p } from "../interface.js";
 import { ENRKey } from "../metadata.js";
 import {
   getConnectionsMap,
-  getDefaultDialer,
+  isDialingPeer,
   prettyPrintPeerId,
 } from "../../utils/index.js";
 import { Discv5Worker } from "../discv5/index.js";
@@ -100,7 +101,6 @@ export class PeerDiscovery {
 
     this.discv5 = new Discv5Worker({
       discv5: opts.discv5,
-      peerId: modules.libp2p.peerId,
       // logger: this.logger,
     });
     const numBootEnrs = opts.discv5.bootEnrs.length;
@@ -147,7 +147,7 @@ export class PeerDiscovery {
         // time expired or
         Date.now() - cachedENR.addedUnixMs > MAX_CACHED_ENR_AGE_MS ||
         // already dialing
-        getDefaultDialer(this.libp2p).pendingDials.has(id)
+        isDialingPeer(this.libp2p, id)
       ) {
         this.cachedENRs.delete(id);
       } else {
@@ -218,8 +218,8 @@ export class PeerDiscovery {
     if (this.randomNodeQuery.code === QueryStatusCode.Active) {
       this.randomNodeQuery.count++;
     }
-    // async due to some crypto that's no longer necessary
-    const peerId = await enr.peerId();
+    // discv5 (12.x) exposes ENR#peerId as a synchronous getter.
+    const peerId = enr.peerId;
     // tcp multiaddr is known to be be present, checked inside the worker
     const multiaddrTCP = enr.getLocationMultiaddr(ENRKey.tcp);
     if (!multiaddrTCP) {
@@ -254,7 +254,7 @@ export class PeerDiscovery {
       }
 
       // Ignore dialing peers
-      if (getDefaultDialer(this.libp2p).pendingDials.has(peerId.toString())) {
+      if (isDialingPeer(this.libp2p, peerId.toString())) {
         return DiscoveredPeerStatus.already_dialing;
       }
 
@@ -304,7 +304,7 @@ export class PeerDiscovery {
 
     // Must add the multiaddrs array to the address book before dialing
     // https://github.com/libp2p/js-libp2p/blob/aec8e3d3bb1b245051b60c2a890550d262d5b062/src/index.js#L638
-    await this.libp2p.peerStore.addressBook.add(peerId, [multiaddrTCP]);
+    await this.libp2p.peerStore.merge(peerId, { multiaddrs: [multiaddrTCP] });
 
     // Note: PeerDiscovery adds the multiaddrTCP beforehand
     const peerIdShort = prettyPrintPeerId(peerId);
@@ -326,12 +326,12 @@ export class PeerDiscovery {
 
   /** Check if there is 1+ open connection with this peer */
   private isPeerConnected(peerIdStr: PeerIdStr): boolean {
-    const connections = getConnectionsMap(this.libp2p.connectionManager).get(
+    const connections = getConnectionsMap(this.libp2p).get(
       peerIdStr
     );
     return Boolean(
       connections &&
-        connections.some((connection) => connection.stat.status === "OPEN")
+        connections.some((connection) => connection.status === "open")
     );
   }
 }

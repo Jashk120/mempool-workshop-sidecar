@@ -1,43 +1,34 @@
-import { Eth } from "@skandha/executor/lib/modules/eth";
 import {
   GetConfigResponse,
-  GetFeeHistoryResponse,
   GetGasPriceResponse,
-  UserOperationStatus,
 } from "@skandha/types/lib/api/interfaces";
 import { Skandha } from "@skandha/executor/lib/modules";
-import RpcError from "@skandha/types/lib/api/errors/rpc-error.js";
-import * as RpcErrorCodes from "@skandha/types/lib/api/errors/rpc-error-codes.js";
-import { RpcMethodValidator } from "../utils/RpcMethodValidator.js";
-import { FeeHistoryArgs } from "../dto/FeeHistory.dto.js";
+import { FrameTransactionStatus } from "@skandha/executor/lib/modules/interfaces.js";
 
+/**
+ * Skandha's custom RPC surface, wrapping `packages/executor`'s `Skandha`
+ * module.
+ *
+ * `getFeeHistory` is dropped entirely, not just renamed - see
+ * `packages/executor/src/modules/skandha.ts`'s own header comment for why
+ * no EIP-8141 analogue exists (no multi-EntryPoint dispatch, no
+ * `handleOps` calldata to decode, no `UserOperationEvent` log to filter
+ * for). `skandha_feeHistory`'s RPC entry is removed from `constants.ts`/
+ * `app.ts` too. This class no longer takes an `Eth` module - `getFeeHistory`
+ * was its only use of one (to call `validateEntryPoint` on
+ * `args.entryPoint`, itself deleted).
+ */
 export class SkandhaAPI {
-  constructor(private ethModule: Eth, private skandhaModule: Skandha) {}
+  constructor(private skandhaModule: Skandha) {}
 
   /**
-   * @params hash hash of a userop
-   * @returns status
+   * Replaces the old `getUserOperationStatus`.
+   * @param hash the frame transaction's own hash.
    */
-  async getUserOperationStatus(hash: string): Promise<UserOperationStatus> {
-    return this.skandhaModule.getUserOperationStatus(hash);
-  }
-
-  /**
-   * @param entryPoint Entry Point
-   * @param useropCount Number of blocks in the requested range
-   * @param newestBlock Highest number block of the requested range, or "latest"
-   * @returns
-   */
-  @RpcMethodValidator(FeeHistoryArgs)
-  async getFeeHistory(args: FeeHistoryArgs): Promise<GetFeeHistoryResponse> {
-    if (!this.ethModule.validateEntryPoint(args.entryPoint)) {
-      throw new RpcError("Invalid Entrypoint", RpcErrorCodes.INVALID_REQUEST);
-    }
-    return await this.skandhaModule.getFeeHistory(
-      args.entryPoint,
-      args.blockCount,
-      args.newestBlock
-    );
+  async getFrameTransactionStatus(
+    hash: string
+  ): Promise<FrameTransactionStatus> {
+    return this.skandhaModule.getFrameTransactionStatus(hash);
   }
 
   async getGasPrice(): Promise<GetGasPriceResponse> {

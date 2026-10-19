@@ -9,7 +9,11 @@ import * as RpcErrorCodes from "@skandha/types/lib/api/errors/rpc-error-codes.js
 export class SubscriptionApi {
   constructor(private subscriptionService: SubscriptionService) {}
 
-  subscribe(socket: WebSocket, event: ExecutorEvent): string {
+  subscribe(
+    socket: WebSocket,
+    event: ExecutorEvent,
+    sinceSeq?: number
+  ): string {
     switch (event) {
       case ExecutorEvent.pendingUserOps: {
         return this.subscriptionService.listenPendingUserOps(socket);
@@ -22,6 +26,12 @@ export class SubscriptionApi {
       }
       case ExecutorEvent.ping: {
         return this.subscriptionService.listenPing(socket);
+      }
+      case ExecutorEvent.explorerEvents: {
+        return this.subscriptionService.listenExplorerEvents(
+          socket,
+          typeof sinceSeq === "number" ? sinceSeq : undefined
+        );
       }
       default: {
         throw new RpcError(

@@ -1,12 +1,17 @@
 import { Libp2p as ILibp2p } from "libp2p";
-import { Connection } from "@libp2p/interface-connection";
+import { Connection } from "@libp2p/interface";
 import { Multiaddr } from "@multiformats/multiaddr";
-import { PeerId } from "@libp2p/interface-peer-id";
+import { PeerId } from "@libp2p/interface";
 // eslint-disable-next-line import/namespace
+import { ValueOf } from "@chainsafe/ssz";
 import { ts } from "@skandha/types/lib/index.js";
-import { SignableENR } from "@chainsafe/discv5";
-import type { ConnectionManager } from "@libp2p/interface-connection-manager";
-import type { Registrar } from "@libp2p/interface-registrar";
+import {
+  PooledFrameTxHashesRequest as PooledFrameTxHashesRequestSsz,
+  PooledFrameTxHashes as PooledFrameTxHashesSsz,
+  PooledFrameTxsByHashRequest as PooledFrameTxsByHashRequestSsz,
+  PooledFrameTxsByHash as PooledFrameTxsByHashSsz,
+} from "@skandha/types/lib/node/frameTx.js";
+import { SignableENR } from "@chainsafe/enr";
 import { Logger } from "@skandha/api/lib/logger";
 import { INetworkEventBus } from "./events.js";
 import { MetadataController } from "./metadata.js";
@@ -35,18 +40,18 @@ export interface INetwork {
   getConnectedPeerCount(): number;
 
   /* List of p2p functions supported by Bundler */
-  publishVerifiedUserOperation(
-    userOp: ts.VerifiedUserOperation,
+  publishVerifiedFrameTx(
+    verifiedFrameTx: ts.VerifiedFrameTx,
     mempool: string
   ): Promise<void>;
-  pooledUserOpHashes(
+  pooledFrameTxHashes(
     peerId: PeerId,
-    req: ts.PooledUserOpHashesRequest
-  ): Promise<ts.PooledUserOpHashes>;
-  pooledUserOpsByHash(
+    req: ValueOf<typeof PooledFrameTxHashesRequestSsz>
+  ): Promise<ValueOf<typeof PooledFrameTxHashesSsz>>;
+  pooledFrameTxsByHash(
     peerId: PeerId,
-    req: ts.PooledUserOpsByHashRequest
-  ): Promise<ts.PooledUserOpsByHash>;
+    req: ValueOf<typeof PooledFrameTxsByHashRequestSsz>
+  ): Promise<ValueOf<typeof PooledFrameTxsByHashSsz>>;
 
   //Gossip handler
   subscribeGossipCoreTopics(mempool: string): void;
@@ -64,10 +69,11 @@ export interface INetwork {
   getAgentVersion(peerIdStr: string): string;
 }
 
-export type PeerDirection = Connection["stat"]["direction"];
-export type PeerStatus = Connection["stat"]["status"];
+export type PeerDirection = Connection["direction"];
+export type PeerStatus = Connection["status"];
 
-export type Libp2p = ILibp2p & {
-  connectionManager: ConnectionManager;
-  registrar: Registrar;
-};
+// libp2p 1.x+ dropped the Components pattern - handle()/unhandle()/
+// register()/unregister()/dial()/hangUp()/getConnections()/getDialQueue()
+// are all directly on the Libp2p instance now, and there is no more
+// `.connectionManager`/`.registrar` sub-object.
+export type Libp2p = ILibp2p;

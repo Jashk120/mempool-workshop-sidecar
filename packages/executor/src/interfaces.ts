@@ -1,10 +1,6 @@
-import {
-  IWhitelistedEntities,
-  RelayingMode,
-} from "@skandha/types/lib/executor";
+import { IWhitelistedEntities } from "@skandha/types/lib/executor";
 import { INodeAPI } from "@skandha/types/lib/node/index.js";
 import { Address, Hex } from "viem";
-import { MempoolEntry } from "./entities/MempoolEntry.js";
 
 type BigNumberish = bigint | number | `0x${string}` | `${number}` | string;
 
@@ -93,6 +89,11 @@ export interface NetworkConfig {
   // min unstake delay
   // default: 1
   minUnstakeDelay: number;
+  // EIP-8421 IStakingRegistry contract address. Zero address (the default)
+  // means "unconfigured" - StakingRegistryService then short-circuits to
+  // zero stake for every entity without a chain call. See
+  // docs/superpowers/specs/2026-09-30-naive-staking-registry-design.md.
+  stakingRegistryAddress: Hex;
   multicall: string;
   // adds certain amount of gas to callGasLimit
   // 21000 by default
@@ -137,15 +138,18 @@ export interface NetworkConfig {
   whitelistedEntities: IWhitelistedEntities;
   // adds some amount of gas to a estimated bundle
   bundleGasLimitMarkup: number;
-  // relaying mode: via Flashbots Builder API or classic relaying
-  // default is "classic"
-  // if flashbots is used, "rpcEndpointSubmit" must be set
-  relayingMode: RelayingMode;
+  // Bounds how many submissions to the privileged ethrex endpoint can be in
+  // flight at once - see BaseRelayer; there is no wallet pool to size this
+  // by any more, since the one relaying strategy signs nothing.
+  maxConcurrentSubmissions: number;
   // Interval of bundling
   // default is 10 seconds
   bundleInterval: number;
-  // Interval to wait of entries after submission
-  waitForConfirmationInterval: number;
+  // How many times MempoolReconciler will requeue an entry whose privileged
+  // submission missed its one-shot inclusion window before giving up and
+  // cancelling it (see BundlingService.selectEntries and
+  // reconciliation.ts's reconcileSubmitted).
+  maxSubmitAttempts: number;
   // max bundle size in terms of user ops
   // default is 4
   bundleSize: number;
@@ -153,13 +157,15 @@ export interface NetworkConfig {
   // 1000 = adds 1000 gas on top of estimated PVG
   // default = 0
   pvgMarkup: number;
-  // canonical mempool id
-  canonicalMempoolId: string;
+  // this node's standard (ERC-7562-derived) mempool id - one alt-mempool
+  // among any number of others, not privileged as "canonical" (see
+  // FrameTxValidationResult's doc comment)
+  standardMempoolId: string;
   // canonical entry point
   canonicalEntryPoint: string;
   // array of supported mempools with their associated entry points
-  // if not provided, falls back to canonicalMempoolId and canonicalEntryPoint if set
-  // if provided, canonical mempool will be automatically added if not already included
+  // if not provided, falls back to standardMempoolId and canonicalEntryPoint if set
+  // if provided, the standard mempool will be automatically added if not already included
   supportedMempools: Array<{ mempoolId: string; entryPoint: string }>;
   // add gas fee in simulated transactions (may be required for some rpc providers)
   gasFeeInSimulation: boolean;
@@ -167,9 +173,6 @@ export interface NetworkConfig {
   skipBundleValidation: boolean;
   userOpGasLimit: number; // 25kk by default
   bundleGasLimit: number; // 25kk by default
-  // api url of Merkle.io (by default https://pool.merkle.io)
-  merkleApiURL: string;
-  kolibriAuthKey: string;
   // adds certain amount of gas to callGasLimit
   cglMarkup: number;
   // adds certain amount of gas to verificationGasLimit
@@ -178,9 +181,6 @@ export interface NetworkConfig {
   paymasterVglMarkup: number;
   // adds certain amount of gas to paymasterPostOpGasLimit
   paymasterPoglMarkup: number;
-  // api auth key for echo: https://echo.chainbound.io/docs/usage/api-interface#authentication
-  echoAuthKey: string;
-  fastlaneValidators: string[];
   archiveDuration: number;
   estimationGasLimit: number;
   pvgMarkupPercent: number;
@@ -196,7 +196,6 @@ export interface NetworkConfig {
   tenderlyKey: string;
   tenderlySave: boolean;
   rpcTimeout: string;
-  eip7702: boolean;
   pollingInterval: number;
   disableWatchContract: boolean;
   // simulation contracts
@@ -204,8 +203,6 @@ export interface NetworkConfig {
   pimlicoSimulationsContract: string;
   // max number of retries for binary search on simulation contracts
   binarySearchMaxRetries: number;
-  // native tracer enabled
-  nativeTracer: boolean;
   // list of precompiled addresses
   precompiles: string[];
   // flag to relay userops to connected peers via p2p when userop is validated because of whitelisted entities
@@ -222,41 +219,7 @@ export interface ConfigOptions {
   testingMode?: boolean;
   unsafeMode: boolean;
   redirectRpc: boolean;
-}
-
-export interface SlotMap {
-  [slot: string]: string;
-}
-
-export interface StorageMap {
-  [address: string]: string | SlotMap;
-}
-
-export interface ReferencedCodeHashes {
-  // addresses accessed during this user operation
-  addresses: string[];
-  // keccak over the code of all referenced addresses
-  hash: string;
-}
-
-export interface UserOpValidationResult {
-  returnInfo: {
-    preOpGas: BigNumberish;
-    prefund: BigNumberish;
-    sigFailed: boolean;
-    validAfter: number;
-    validUntil: number;
-  };
-
-  senderInfo: StakeInfo;
-  factoryInfo?: StakeInfo;
-  paymasterInfo?: StakeInfo;
-  aggregatorInfo?: StakeInfo;
-  referencedContracts?: ReferencedCodeHashes;
-  storageMap?: StorageMap;
-
-  belongsToCanonicalMempool: boolean;
-  mempoolId?: string;
+  explorer?: boolean;
 }
 
 export interface ExecutionResult {
@@ -305,13 +268,8 @@ export interface StakeInfo {
   addr: string;
   stake: BigNumberish;
   unstakeDelaySec: BigNumberish;
-}
-
-export interface Bundle {
-  entries: MempoolEntry[];
-  maxFeePerGas: BigNumberish;
-  maxPriorityFeePerGas: BigNumberish;
-  storageMap: StorageMap;
+  /** 0 while no withdrawal has been initiated; non-zero disqualifies the entity from being "staked" per ERC-8421's STAKING-010. */
+  withdrawTime: BigNumberish;
 }
 
 export interface GetStakeStatus {

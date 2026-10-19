@@ -1,9 +1,0 @@
-# start a standlone bundler for testing.
-# bring up a the bundler with its own geth instance
-
-version: '2'
-
-services:
-  geth-dev:
-    build: geth-dev
-    ports: [ '8545:8545' ]

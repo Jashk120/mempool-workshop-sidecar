@@ -1,4 +1,4 @@
-import { Sink } from "it-stream-types";
+import { Sink, Source } from "it-stream-types";
 import { Uint8ArrayList } from "uint8arraylist";
 import { MixedProtocolDefinition } from "../types.js";
 import { BufferedSource } from "../utils/index.js";
@@ -11,7 +11,7 @@ import { readEncodedPayload } from "../encodingStrategies/index.js";
  */
 export function requestDecode<Req, Resp>(
   protocol: MixedProtocolDefinition<Req, Resp>
-): Sink<Uint8Array | Uint8ArrayList, Promise<Req>> {
+): Sink<Source<Uint8Array | Uint8ArrayList>, Promise<Req>> {
   return async function requestDecodeSink(source) {
     const type = protocol.requestType();
     if (type === null) {

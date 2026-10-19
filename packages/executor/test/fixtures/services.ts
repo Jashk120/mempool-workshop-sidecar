@@ -1,4 +1,3 @@
-import { BigNumber } from "ethers";
 import { Config } from "../../src/config";
 import { NetworkConfig } from "../../src/interfaces";
 import {
@@ -20,7 +19,7 @@ export async function getServices(
   config: Config,
   networkConfig: NetworkConfig
 ) {
-  const provider = config.getNetworkProvider();
+  const publicClient = config.getPublicClient();
   const db = new LocalDbController("test");
   const reputationService = new ReputationService(
     db,
@@ -28,7 +27,7 @@ export async function getServices(
     networkConfig.minInclusionDenominator,
     networkConfig.throttlingSlack,
     networkConfig.banSlack,
-    BigNumber.from(networkConfig.minStake),
+    BigInt(networkConfig.minStake),
     networkConfig.minUnstakeDelay
   );
 
@@ -38,7 +37,7 @@ export async function getServices(
   const entryPointService = new EntryPointService(
     config.chainId,
     networkConfig,
-    provider,
+    publicClient,
     db,
     logger
   );
@@ -57,14 +56,14 @@ export async function getServices(
     mempoolService,
     entryPointService,
     ChainId,
-    provider,
+    publicClient,
     config,
     logger
   );
 
   const userOpValidationService = new UserOpValidationService(
     skandha,
-    provider,
+    publicClient,
     entryPointService,
     reputationService,
     mempoolService,
@@ -75,7 +74,7 @@ export async function getServices(
 
   const bundlingService = new BundlingService(
     ChainId,
-    provider,
+    publicClient,
     entryPointService,
     mempoolService,
     userOpValidationService,
@@ -93,6 +92,7 @@ export async function getServices(
     reputationService,
     mempoolService,
     entryPointService,
+    publicClient,
     eventBus,
     db,
     logger

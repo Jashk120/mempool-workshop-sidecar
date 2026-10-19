@@ -1,9 +1,17 @@
 /* eslint-disable @typescript-eslint/no-empty-function */
-import { Connection } from "@libp2p/interface-connection";
+import { Connection } from "@libp2p/interface";
 import { Multiaddr } from "@multiformats/multiaddr";
-import { PeerId } from "@libp2p/interface-peer-id";
+import { PeerId } from "@libp2p/interface";
+import { ValueOf } from "@chainsafe/ssz";
 import { ssz, ts } from "@skandha/types/lib/index.js";
-import { SignableENR } from "@chainsafe/discv5";
+import {
+  PooledFrameTxHashesRequest as PooledFrameTxHashesRequestSsz,
+  PooledFrameTxHashes as PooledFrameTxHashesSsz,
+  PooledFrameTxsByHashRequest as PooledFrameTxsByHashRequestSsz,
+  PooledFrameTxsByHash as PooledFrameTxsByHashSsz,
+} from "@skandha/types/lib/node/frameTx.js";
+import { SignableENR } from "@chainsafe/enr";
+import { privateKeyFromRaw } from "@libp2p/crypto/keys";
 import logger, { Logger } from "@skandha/api/lib/logger";
 import { serializeMempoolId } from "@skandha/params/lib/index.js";
 import { Config } from "@skandha/executor/lib/config";
@@ -24,7 +32,7 @@ import { PeerManager } from "./peers/peerManager.js";
 import { getCoreTopics } from "./gossip/topic.js";
 import { Discv5Worker } from "./discv5/index.js";
 import { NetworkProcessor } from "./processor/index.js";
-import { pooledUserOpHashes, pooledUserOpsByHash } from "./reqresp/index.js";
+import { pooledFrameTxHashes, pooledFrameTxsByHash } from "./reqresp/index.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -104,7 +112,13 @@ export class Network implements INetwork {
 
   static async init(options: NetworkInitOptions): Promise<Network> {
     const { peerId, relayersConfig, executor, metrics, dataDir, retainPeerId } = options;
-    const libp2p = await createNodeJsLibp2p(peerId, options.opts, {
+    // libp2p 1.x+ derives the node's identity from a PrivateKey rather than
+    // accepting a PeerId directly; the SignableENR (kept in sync with
+    // `peerId` by construction, see BundlerNode.init/cli) carries the raw
+    // private key bytes discv5 needs anyway.
+    const enr = options.opts.discv5?.enr as SignableENR;
+    const privateKey = privateKeyFromRaw(enr.privateKey);
+    const libp2p = await createNodeJsLibp2p(privateKey, options.opts, {
       peerStoreDir: options.peerStoreDir,
     });
 
@@ -270,7 +284,7 @@ export class Network implements INetwork {
   }
 
   getConnectionsByPeer(): Map<string, Connection[]> {
-    return getConnectionsMap(this.libp2p.connectionManager);
+    return getConnectionsMap(this.libp2p);
   }
 
   getConnectedPeers(): PeerId[] {
@@ -286,18 +300,18 @@ export class Network implements INetwork {
   }
 
   /* List of p2p functions supported by Bundler */
-  async publishVerifiedUserOperation(
-    userOp: ts.VerifiedUserOperation,
+  async publishVerifiedFrameTx(
+    verifiedFrameTx: ts.VerifiedFrameTx,
     mempool: string
   ): Promise<void> {
-    await this.gossip.publishVerifiedUserOperation(userOp, mempool);
+    await this.gossip.publishVerifiedFrameTx(verifiedFrameTx, mempool);
   }
 
-  async pooledUserOpHashes(
+  async pooledFrameTxHashes(
     peerId: PeerId,
-    req: ts.PooledUserOpHashesRequest
-  ): Promise<ts.PooledUserOpHashes> {
-    return await pooledUserOpHashes(
+    req: ValueOf<typeof PooledFrameTxHashesRequestSsz>
+  ): Promise<ValueOf<typeof PooledFrameTxHashesSsz>> {
+    return await pooledFrameTxHashes(
       this.reqResp,
       peerId,
       this.executor,
@@ -306,11 +320,11 @@ export class Network implements INetwork {
     );
   }
 
-  async pooledUserOpsByHash(
+  async pooledFrameTxsByHash(
     peerId: PeerId,
-    req: ts.PooledUserOpsByHashRequest
-  ): Promise<ts.PooledUserOpsByHash> {
-    return await pooledUserOpsByHash(
+    req: ValueOf<typeof PooledFrameTxsByHashRequestSsz>
+  ): Promise<ValueOf<typeof PooledFrameTxsByHashSsz>> {
+    return await pooledFrameTxsByHash(
       this.reqResp,
       peerId,
       this.executor,
@@ -344,7 +358,7 @@ export class Network implements INetwork {
 
   // Debug
   async connectToPeer(peer: PeerId, multiaddr: Multiaddr[]): Promise<void> {
-    await this.libp2p.peerStore.addressBook.add(peer, multiaddr);
+    await this.libp2p.peerStore.merge(peer, { multiaddrs: multiaddr });
     await this.libp2p.dial(peer);
   }
 

@@ -112,6 +112,7 @@ export class ReputationService {
             address,
             opsSeen: rawEntries[i] != null ? rawEntries[i].opsSeen : 0,
             opsIncluded: rawEntries[i] != null ? rawEntries[i].opsIncluded : 0,
+            lastUpdateTime: rawEntries[i]?.lastUpdateTime,
           })
       )
       .map((entry) => ({
@@ -183,6 +184,12 @@ export class ReputationService {
     if (BigInt(info.unstakeDelaySec) < BigInt(this.minUnstakeDelay)) {
       return {
         msg: `${info.addr} unstake delay ${info.unstakeDelaySec} is too low (min=${this.minUnstakeDelay})`,
+        code: RpcErrorCodes.STAKE_DELAY_TOO_LOW,
+      };
+    }
+    if (BigInt(info.withdrawTime) !== BigInt(0)) {
+      return {
+        msg: `${info.addr} has already initiated a stake withdrawal`,
         code: RpcErrorCodes.STAKE_DELAY_TOO_LOW,
       };
     }

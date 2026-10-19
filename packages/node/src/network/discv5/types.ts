@@ -1,4 +1,5 @@
-import { Discv5, ENRData, SignableENRData } from "@chainsafe/discv5";
+import { Discv5 } from "@chainsafe/discv5";
+import { ENRData, SignableENRData } from "@chainsafe/enr";
 import { Observable } from "@chainsafe/threads/observable";
 
 // TODO export IDiscv5Config so we don't need this convoluted type
@@ -7,8 +8,7 @@ type Discv5Config = Parameters<(typeof Discv5)["create"]>[0]["config"];
 /** discv5 worker constructor data */
 export interface Discv5WorkerData {
   enr: SignableENRData;
-  peerIdProto: Uint8Array;
-  bindAddr: string;
+  bindAddrs: { ip4?: string; ip6?: string };
   config: Discv5Config;
   bootEnrs: string[];
 }

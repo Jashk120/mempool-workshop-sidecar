@@ -1,11 +1,11 @@
 import { compress, uncompress } from "snappyjs";
 import xxhashFactory from "xxhash-wasm";
-import { Message } from "@libp2p/interface-pubsub";
 import { digest } from "@chainsafe/as-sha256";
 import { RPC } from "@chainsafe/libp2p-gossipsub/message";
 import { intToBytes, toHex } from "@skandha/utils/lib";
 import { MESSAGE_DOMAIN_VALID_SNAPPY } from "./constants.js";
 import { getGossipSSZType, GossipTopicCache } from "./topic.js";
+import { Message } from "./interface.js";
 
 // Load WASM
 const xxhash = await xxhashFactory();
@@ -17,7 +17,7 @@ const h64Seed = BigInt(Math.floor(Math.random() * 1e9));
  * The function used to generate a gossipsub message id
  * We use the first 8 bytes of SHA256(data) for content addressing
  */
-export function fastMsgIdFn(rpcMsg: RPC.IMessage): string {
+export function fastMsgIdFn(rpcMsg: RPC.Message): string {
   if (rpcMsg.data) {
     return xxhash.h64Raw(rpcMsg.data, h64Seed).toString(16);
   } else {

@@ -1,8 +1,8 @@
 import { EventEmitter } from "events";
-import { PeerId } from "@libp2p/interface-peer-id";
+import { PeerId } from "@libp2p/interface";
 import StrictEventEmitter from "strict-event-emitter-types";
 import { ts } from "@skandha/types/lib/index.js";
-import { TopicValidatorResult } from "@libp2p/interface-pubsub";
+import { TopicValidatorResult } from "./gossip/interface.js";
 import { RequestTypedContainer } from "./reqresp/index.js";
 import { PendingGossipsubMessage } from "./processor/types.js";
 

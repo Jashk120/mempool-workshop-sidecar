@@ -1,7 +1,8 @@
 {
-  "name": "root",
+  "name": "frame-tx-sidecar",
+  "description": "P2P sidecar for EIP-8141 frame transaction alt-mempool",
   "private": true,
-  "version": "4.0.2",
+  "version": "4.1.1",
   "engines": {
     "node": ">=18.0.0"
   },
@@ -19,6 +20,10 @@
     "fix-lint": "eslint --ext .ts --fix packages/*/src/",
     "test": "lerna run test --concurrency 1",
     "test:unit": "lerna run test:unit --no-bail --concurrency 1",
+    "test:e2e": "vitest run --config test/e2e/vitest.config.ts",
+    "test:e2e:mining": "vitest run --config test/e2e/vitest.mining.config.ts",
+    "predeploy": "bun run deploy/predeploy/src/cli.ts",
+    "test:predeploy": "cd deploy/predeploy && bunx vitest run",
     "coverage": "vitest run --coverage",
     "check-readme": "lerna run check-readme",
     "release:publish": "lerna publish from-package --yes --no-verify-access",
@@ -63,12 +68,10 @@
     "packages/*"
   ],
   "resolutions": {
-    "@libp2p/interface-connection-manager": "1.3.8",
-    "@multiformats/multiaddr": "12.0.0",
+    "@multiformats/multiaddr": "12.5.1",
     "ajv": "8.17.1"
   },
   "overrides": {
-    "@libp2p/interface-connection-manager": "1.3.8",
-    "@multiformats/multiaddr": "12.0.0"
+    "@multiformats/multiaddr": "12.5.1"
   }
 }

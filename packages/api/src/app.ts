@@ -12,6 +12,7 @@ import {
 } from "./constants.js";
 import {
   EthAPI,
+  ExplorerAPI,
   DebugAPI,
   Web3API,
   RedirectAPI,
@@ -54,6 +55,7 @@ export class ApiApp {
   private web3Api: Web3API;
   private redirectApi: RedirectAPI;
   private skandhaApi: SkandhaAPI;
+  private explorerApi: ExplorerAPI;
   private subscriptionApi: SubscriptionApi;
 
   constructor(options: EtherspotBundlerOptions) {
@@ -70,7 +72,8 @@ export class ApiApp {
     this.debugApi = new DebugAPI(this.executor.debug);
     this.web3Api = new Web3API(this.executor.web3);
     this.redirectApi = new RedirectAPI(this.config);
-    this.skandhaApi = new SkandhaAPI(this.executor.eth, this.executor.skandha);
+    this.skandhaApi = new SkandhaAPI(this.executor.skandha);
+    this.explorerApi = new ExplorerAPI(this.executor.explorer);
 
     // HTTP interface
     this.server.http.post("/rpc/", async (req, res): Promise<void> => {
@@ -159,7 +162,11 @@ export class ApiApp {
     try {
       switch (method) {
         case CustomRPCMethods.skandha_subscribe: {
-          const eventId = this.subscriptionApi.subscribe(socket, params[0]);
+          const eventId = this.subscriptionApi.subscribe(
+            socket,
+            params[0],
+            params[1]
+          );
           response = { jsonrpc, id, result: eventId };
           break;
         }
@@ -240,8 +247,7 @@ export class ApiApp {
 
         case BundlerRPCMethods.debug_bundler_setMempool:
           result = await this.debugApi.setMempool({
-            userOps: params[0],
-            entryPoint: params[1],
+            txs: params[0],
           });
           break;
         case BundlerRPCMethods.debug_bundler_getStakeStatus:
@@ -253,6 +259,12 @@ export class ApiApp {
         case BundlerRPCMethods.debug_bundler_clearReputation:
           result = await this.debugApi.clearReputation();
           break;
+        case BundlerRPCMethods.debug_bundler_setPrivilegedRelayTargetBlock:
+          result = await this.debugApi.setPrivilegedRelayTargetBlock({
+            txHash: params[0],
+            targetBlock: params[1],
+          });
+          break;
       }
     }
 
@@ -263,38 +275,20 @@ export class ApiApp {
 
     if (!result) {
       switch (method) {
-        case BundlerRPCMethods.eth_supportedEntryPoints:
-          result = await this.ethApi.getSupportedEntryPoints();
-          break;
         case BundlerRPCMethods.eth_chainId:
           result = await this.ethApi.getChainId();
           break;
-        case BundlerRPCMethods.eth_sendUserOperation:
-          result = await this.ethApi.sendUserOperation({
-            userOp: params[0],
-            entryPoint: params[1],
-          });
+        case BundlerRPCMethods.eth_sendFrameTransaction:
+          result = await this.ethApi.sendFrameTransaction(params[0]);
           break;
-        case BundlerRPCMethods.eth_estimateUserOperationGas: {
-          if (this.testingMode) {
-            result = await this.ethApi.estimateUserOpGasAndValidateSignature({
-              userOp: params[0],
-              entryPoint: params[1],
-            });
-          } else {
-            result = await this.ethApi.estimateUserOperationGas({
-              userOp: params[0],
-              entryPoint: params[1],
-              stateOverrides: params[2],
-            });
-          }
+        case BundlerRPCMethods.eth_estimateFrameTransactionGas:
+          result = await this.ethApi.estimateFrameTransactionGas(params[0]);
           break;
-        }
-        case BundlerRPCMethods.eth_getUserOperationReceipt:
-          result = await this.ethApi.getUserOperationReceipt(params[0]);
+        case BundlerRPCMethods.eth_getFrameTransactionReceipt:
+          result = await this.ethApi.getFrameTransactionReceipt(params[0]);
           break;
-        case BundlerRPCMethods.eth_getUserOperationByHash:
-          result = await this.ethApi.getUserOperationByHash(params[0]);
+        case BundlerRPCMethods.eth_getFrameTransactionByHash:
+          result = await this.ethApi.getFrameTransactionByHash(params[0]);
           break;
         case BundlerRPCMethods.web3_clientVersion:
           result = this.web3Api.clientVersion();
@@ -302,19 +296,41 @@ export class ApiApp {
         case CustomRPCMethods.skandha_getGasPrice:
           result = await this.skandhaApi.getGasPrice();
           break;
-        case CustomRPCMethods.skandha_feeHistory:
-          result = await this.skandhaApi.getFeeHistory({
-            entryPoint: params[0],
-            blockCount: params[1],
-            newestBlock: params[2],
-          });
-          break;
         case CustomRPCMethods.skandha_config:
           result = await this.skandhaApi.getConfig();
           // skip hexlify for this particular rpc
           return { jsonrpc, id, result };
-        case CustomRPCMethods.skandha_userOperationStatus:
-          result = await this.skandhaApi.getUserOperationStatus(params[0]);
+        // Explorer results are plain JSON; deepHexlify would turn every number into a hex string.
+        case CustomRPCMethods.skandha_explorer_info:
+          return { jsonrpc, id, result: this.explorerApi.info() };
+        case CustomRPCMethods.skandha_explorer_listTransactions:
+          return {
+            jsonrpc,
+            id,
+            result: await this.explorerApi.listTransactions(params?.[0]),
+          };
+        case CustomRPCMethods.skandha_explorer_listAdmissions:
+          return {
+            jsonrpc,
+            id,
+            result: this.explorerApi.listAdmissions(params?.[0]),
+          };
+        case CustomRPCMethods.skandha_explorer_getTransaction:
+          return {
+            jsonrpc,
+            id,
+            result: await this.explorerApi.getTransaction(params?.[0]),
+          };
+        case CustomRPCMethods.skandha_explorer_peers:
+          return { jsonrpc, id, result: this.explorerApi.peers() };
+        case CustomRPCMethods.skandha_explorer_listReputation:
+          return {
+            jsonrpc,
+            id,
+            result: await this.explorerApi.listReputation(params?.[0]),
+          };
+        case CustomRPCMethods.skandha_frameTransactionStatus:
+          result = await this.skandhaApi.getFrameTransactionStatus(params[0]);
           break;
         case CustomRPCMethods.skandha_connectedPeers:
           result = this.skandhaApi.connectedPeers();

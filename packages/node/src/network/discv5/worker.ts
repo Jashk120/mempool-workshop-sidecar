@@ -1,16 +1,10 @@
 import worker from "worker_threads";
-import { createFromProtobuf } from "@libp2p/peer-id-factory";
 import { multiaddr } from "@multiformats/multiaddr";
+import { privateKeyFromRaw } from "@libp2p/crypto/keys";
 import { expose } from "@chainsafe/threads/worker";
 import { Observable, Subject } from "@chainsafe/threads/observable";
-import {
-  createKeypairFromPeerId,
-  Discv5,
-  ENR,
-  ENRData,
-  SignableENR,
-  SignableENRData,
-} from "@chainsafe/discv5";
+import { Discv5, BindAddrs } from "@chainsafe/discv5";
+import { ENR, ENRData, SignableENR, SignableENRData } from "@chainsafe/enr";
 import { ENRKey } from "../metadata.js";
 import { Discv5WorkerApi, Discv5WorkerData } from "./types.js";
 
@@ -39,16 +33,20 @@ async function initializeWorker() {
   // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
   if (!workerData) throw Error("workerData must be defined");
 
-  // Worker data received from main thread
+  // SignableENRData already carries the raw private key bytes, so the
+  // SignableENR (and the discv5 service's PrivateKey) can be reconstructed
+  // directly, without the old PeerId/keypair round-trip.
+  const privateKey = privateKeyFromRaw(workerData.enr.privateKey);
 
-  const peerId = await createFromProtobuf(workerData.peerIdProto);
-  const keypair = createKeypairFromPeerId(peerId);
+  const bindAddrs: BindAddrs = workerData.bindAddrs.ip4
+    ? { ip4: multiaddr(workerData.bindAddrs.ip4) }
+    : { ip6: multiaddr(workerData.bindAddrs.ip6 as string) };
 
   // Initialize discv5
   const discv5 = Discv5.create({
-    enr: new SignableENR(workerData.enr.kvs, workerData.enr.seq, keypair),
-    peerId,
-    multiaddr: multiaddr(workerData.bindAddr),
+    enr: SignableENR.fromObject(workerData.enr),
+    privateKey,
+    bindAddrs,
     config: workerData.config,
   });
 

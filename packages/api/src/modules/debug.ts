@@ -1,8 +1,10 @@
-import { UserOperation } from "@skandha/types/lib/contracts/UserOperation";
 import { Debug } from "@skandha/executor/lib/modules";
 import { BundlingMode } from "@skandha/types/lib/api/interfaces";
 import { GetStakeStatus } from "@skandha/executor/lib/interfaces";
-import { MempoolEntrySerialized } from "@skandha/executor/lib/entities/interfaces";
+import {
+  FrameTransactionSerialized,
+  FrameTxMempoolEntrySerialized,
+} from "@skandha/executor/lib/entities/interfaces";
 import { RpcMethodValidator } from "../utils/RpcMethodValidator.js";
 import {
   SetReputationArgs,
@@ -12,9 +14,17 @@ import { SetBundlingIntervalArgs } from "../dto/SetBundlingInterval.dto.js";
 import { SetMempoolArgs } from "../dto/SetMempool.dto.js";
 import { GetStakeStatusArgs } from "../dto/GetStakeStatus.dto.js";
 import { DumpReputationArgs } from "../dto/DumpReputation.dto.js";
+import { SetPrivilegedRelayTargetBlockArgs } from "../dto/SetPrivilegedRelayTargetBlock.dto.js";
+import { toFrameTransaction } from "../utils/frameTx.js";
 
 /*
   SPEC: https://eips.ethereum.org/EIPS/eip-4337#rpc-methods-debug-namespace
+
+  `dumpMempool`/`dumpMempoolRaw`/`setMempool` are frame-transaction-shaped,
+  mirroring `packages/executor/src/modules/debug.ts`'s retyping.
+  Everything else here (`setBundlingMode`/`clearState`/`sendBundleNow`/
+  `setReputation`/`dumpReputation`/`setBundlingInterval`/`clearReputation`/
+  `getStakeStatus`) references no UserOp-shaped data and needs no change.
 */
 export class DebugAPI {
   constructor(private debugModule: Debug) {}
@@ -42,14 +52,17 @@ export class DebugAPI {
   }
 
   /**
-   * Dumps the current UserOperations mempool
-   * array - Array of UserOperations currently in the mempool
+   * Dumps the current frame transactions mempool.
+   * array - Array of (serialized) FrameTransactions currently in the mempool
    */
-  async dumpMempool(): Promise<UserOperation[]> {
+  async dumpMempool(): Promise<FrameTransactionSerialized[]> {
     return await this.debugModule.dumpMempool();
   }
 
-  async dumpMempoolRaw(): Promise<MempoolEntrySerialized[]> {
+  /**
+   * Dumps the current frame transactions mempool (raw, serialized entries).
+   */
+  async dumpMempoolRaw(): Promise<FrameTxMempoolEntrySerialized[]> {
     return await this.debugModule.dumpMempoolRaw();
   }
 
@@ -99,16 +112,32 @@ export class DebugAPI {
 
   /**
    * Seeds the local mempool with the passed array. Parameters:
-   * userOps - An array of UserOperations.
+   * txs - An array of (hex-string wire shape) FrameTransactions.
    * returns "ok"
    */
   @RpcMethodValidator(SetMempoolArgs)
   async setMempool(args: SetMempoolArgs): Promise<string> {
-    return await this.debugModule.setMempool(args);
+    return await this.debugModule.setMempool({
+      txs: args.txs.map(toFrameTransaction),
+    });
   }
 
   async getStakeStatus(args: GetStakeStatusArgs): Promise<GetStakeStatus> {
     return await this.debugModule.getStakeStatus(args.address, args.entryPoint);
+  }
+
+  /**
+   * Test-only admin lever: see `Debug.setPrivilegedRelayTargetBlock`'s own
+   * doc comment.
+   */
+  @RpcMethodValidator(SetPrivilegedRelayTargetBlockArgs)
+  async setPrivilegedRelayTargetBlock(
+    args: SetPrivilegedRelayTargetBlockArgs
+  ): Promise<string> {
+    return await this.debugModule.setPrivilegedRelayTargetBlock(
+      args.txHash,
+      args.targetBlock
+    );
   }
 
 

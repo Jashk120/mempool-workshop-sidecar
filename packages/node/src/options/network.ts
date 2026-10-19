@@ -1,11 +1,8 @@
 import { homedir } from "node:os";
-import {
-  IDiscv5DiscoveryInputOptions,
-  SignableENR,
-  createKeypairFromPeerId,
-} from "@chainsafe/discv5";
+import { IDiscv5DiscoveryInputOptions } from "@chainsafe/discv5";
+import { SignableENR } from "@chainsafe/enr";
 import { P2POptions, defaultP2POptions } from "@skandha/types/lib/options";
-import { createSecp256k1PeerId } from "@libp2p/peer-id-factory";
+import { generateKeyPair } from "@libp2p/crypto/keys";
 import { PeerManagerOpts } from "./peers.js";
 
 export const defaultP2PHost = "127.0.0.1";
@@ -29,7 +26,7 @@ export const initNetworkOptions = (
   }
 
   const discv5Options: IDiscv5DiscoveryInputOptions = {
-    bindAddr: `/ip4/${p2pOptions.host}/udp/${p2pOptions.enrPort}`,
+    bindAddrs: { ip4: `/ip4/${p2pOptions.host}/udp/${p2pOptions.enrPort}` },
     enr: enr,
     bootEnrs: p2pOptions.bootEnrs || [],
     enrUpdate: true,
@@ -51,9 +48,9 @@ export const initNetworkOptions = (
   return networkOptions;
 };
 
-const randomPeerId = await createSecp256k1PeerId();
+const randomPrivateKey = await generateKeyPair("secp256k1");
 export const defaultNetworkOptions = initNetworkOptions(
-  SignableENR.createV4(createKeypairFromPeerId(randomPeerId)),
+  SignableENR.createV4(randomPrivateKey.raw),
   defaultP2POptions,
   ""
 );

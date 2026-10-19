@@ -1,5 +1,5 @@
-import { Connection } from "@libp2p/interface-connection";
-import { PeerId } from "@libp2p/interface-peer-id";
+import { Connection } from "@libp2p/interface";
+import { PeerId } from "@libp2p/interface";
 import { IDiscv5DiscoveryInputOptions } from "@chainsafe/discv5";
 import Logger from "@skandha/api/lib/logger";
 import { ts } from "@skandha/types/lib/index.js";
@@ -132,11 +132,11 @@ export class PeerManager {
 
   async start(): Promise<void> {
     await this.discovery?.start();
-    this.libp2p.connectionManager.addEventListener(
+    this.libp2p.addEventListener(
       Libp2pEvent.peerConnect,
       this.onLibp2pPeerConnect as any
     );
-    this.libp2p.connectionManager.addEventListener(
+    this.libp2p.addEventListener(
       Libp2pEvent.peerDisconnect,
       this.onLibp2pPeerDisconnect as any
     );
@@ -156,11 +156,11 @@ export class PeerManager {
 
   async stop(): Promise<void> {
     await this.discovery?.stop();
-    this.libp2p.connectionManager.removeEventListener(
+    this.libp2p.removeEventListener(
       Libp2pEvent.peerConnect,
       this.onLibp2pPeerConnect as any
     );
-    this.libp2p.connectionManager.removeEventListener(
+    this.libp2p.removeEventListener(
       Libp2pEvent.peerDisconnect,
       this.onLibp2pPeerDisconnect as any
     );
@@ -318,9 +318,8 @@ export class PeerManager {
     if (peerData && peerData.relevantStatus !== RelevantPeerStatus.relevant) {
       this.libp2p.peerStore
         // ttl = undefined means it's never expired
-        .tagPeer(peer, PEER_RELEVANT_TAG, {
-          ttl: undefined,
-          value: PEER_RELEVANT_TAG_VALUE,
+        .merge(peer, {
+          tags: { [PEER_RELEVANT_TAG]: { ttl: undefined, value: PEER_RELEVANT_TAG_VALUE } },
         })
         .catch((e) =>
           this.logger.debug(
@@ -331,7 +330,7 @@ export class PeerManager {
         );
       peerData.relevantStatus = RelevantPeerStatus.relevant;
     }
-    if (getConnection(this.libp2p.connectionManager, peer.toString())) {
+    if (getConnection(this.libp2p, peer.toString())) {
       this.logger.debug(`Peer connected: ${peer.toString()}`);
       this.networkEventBus.emit(NetworkEvent.peerConnected, peer, status);
     }
@@ -498,8 +497,8 @@ export class PeerManager {
     evt: CustomEvent<Connection>
   ): Promise<void> => {
     const libp2pConnection = evt.detail;
-    const { direction, status } = libp2pConnection.stat;
-    const peer: any = libp2pConnection.remotePeer;
+    const { direction, status } = libp2pConnection;
+    const peer = libp2pConnection.remotePeer;
     this.logger.debug(
       {
         peer: prettyPrintPeerId(peer),
@@ -510,7 +509,7 @@ export class PeerManager {
     );
     // libp2p may emit closed connection, we don't want to handle it
     // see https://github.com/libp2p/js-libp2p/issues/1565
-    if (this.connectedPeers.has(peer.toString()) || status !== "OPEN") {
+    if (this.connectedPeers.has(peer.toString()) || status !== "open") {
       return;
     }
 
@@ -547,11 +546,9 @@ export class PeerManager {
     // since it's not possible to handle it async, we have to wait for a while to set AgentVersion
     // See https://github.com/libp2p/js-libp2p/pull/1168
     setTimeout(async () => {
-      const agentVersionBytes =
-        await this.libp2p.peerStore.metadataBook.getValue(
-          peerData.peerId,
-          "AgentVersion"
-        );
+      const agentVersionBytes = (
+        await this.libp2p.peerStore.get(peerData.peerId)
+      ).metadata.get("AgentVersion");
       if (agentVersionBytes) {
         const agentVersion =
           new TextDecoder().decode(agentVersionBytes) || "N/A";
@@ -566,8 +563,8 @@ export class PeerManager {
    */
   private onLibp2pPeerDisconnect = (evt: CustomEvent<Connection>): void => {
     const libp2pConnection = evt.detail;
-    const { direction, status } = libp2pConnection.stat;
-    const peer: any = libp2pConnection.remotePeer;
+    const { direction, status } = libp2pConnection;
+    const peer = libp2pConnection.remotePeer;
 
     // remove the ping and status timer for the peer
     this.connectedPeers.delete(peer.toString());
@@ -582,7 +579,7 @@ export class PeerManager {
     );
     this.networkEventBus.emit(NetworkEvent.peerDisconnected, peer);
     this.libp2p.peerStore
-      .unTagPeer(peer, PEER_RELEVANT_TAG)
+      .merge(peer, { tags: { [PEER_RELEVANT_TAG]: undefined } })
       .catch((e) =>
         this.logger.debug(
           "cannot untag peer",

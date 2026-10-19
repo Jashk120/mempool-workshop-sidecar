@@ -2,6 +2,7 @@ import path from "node:path";
 import rocks from "@farcaster/rocksdb";
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { IDbController } from "@skandha/types/lib/index.js";
+import { replaceBigints, reviveBigints } from "./bigintJson.js";
 
 enum Status {
   started = "started",
@@ -26,7 +27,7 @@ export class RocksDbController implements IDbController {
           return reject(err);
         }
         try {
-          resolve(JSON.parse(value as string));
+          resolve(JSON.parse(value as string, reviveBigints));
         } catch (_) {
           return resolve(value as T);
         }
@@ -40,9 +41,7 @@ export class RocksDbController implements IDbController {
     return new Promise((resolve, reject) => {
       this.db.put(
         key,
-        JSON.stringify(value, (_, value) =>
-          typeof value === "bigint" ? "0x" + value.toString(16) : value
-        ),
+        JSON.stringify(value, replaceBigints),
         (err) => {
           if (err) {
             return reject(err);
@@ -73,7 +72,9 @@ export class RocksDbController implements IDbController {
           return reject(err);
         }
         try {
-          resolve(values.map((value) => JSON.parse(value as string)));
+          resolve(
+            values.map((value) => JSON.parse(value as string, reviveBigints))
+          );
         } catch (_) {
           return reject(values as T[]);
         }

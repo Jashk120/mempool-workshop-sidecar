@@ -126,7 +126,7 @@ function getAllTopicsScoreParams(
   // other topics
   topicsParams[
     stringifyGossipTopic({
-      type: GossipType.user_operation,
+      type: GossipType.frame_transaction,
       mempool: "",
     })
   ] = getTopicScoreParams(precomputedParams, {

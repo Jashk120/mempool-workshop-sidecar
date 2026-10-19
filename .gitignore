@@ -1,4 +1,6 @@
 
+.worktrees/
+
 # Created by https://www.gitignore.io/api/node
 # Edit at https://www.gitignore.io/?templates=node
 
@@ -131,3 +133,6 @@ packages/*/lib
 skandha
 /db
 packages/cli/.git-data.json
+
+# devnet playground state (deploy/devnet/playground)
+.playground-state.json

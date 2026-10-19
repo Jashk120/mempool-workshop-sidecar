@@ -1,67 +1,98 @@
 import RpcError from "@skandha/types/lib/api/errors/rpc-error";
-import {
-  IEntityWithAggregator,
-  IWhitelistedEntities,
-  ReputationStatus,
-} from "@skandha/types/lib/executor";
+import { IWhitelistedEntities, ReputationStatus } from "@skandha/types/lib/executor";
 import * as RpcErrorCodes from "@skandha/types/lib/api/errors/rpc-error-codes.js";
-import { UserOperation } from "@skandha/types/lib/contracts/UserOperation";
-import { getAddress, Hex } from "viem";
-import { MempoolEntry } from "../../entities/MempoolEntry.js";
+import { getAddress } from "viem";
+import { isKeyedNonce } from "@skandha/types/lib/contracts/FrameTx.js";
+import { FrameTxMempoolEntry as MempoolEntry } from "../../entities/FrameTxMempoolEntry.js";
 import { KnownEntities, NetworkConfig, StakeInfo } from "../../interfaces.js";
 import { ReputationService } from "../ReputationService.js";
-import { getAddr } from "../../utils/index.js";
-import { EntryPointService } from "../EntryPointService/index.js";
 import { MempoolService } from "./service.js";
 import {
   MAX_MEMPOOL_USEROPS_PER_SENDER,
   THROTTLED_ENTITY_MEMPOOL_COUNT,
 } from "./constants.js";
-import { INITCODE_EIP7702_MARKER } from "@skandha/params/lib/index.js";
+
+// `updateIncludedStatus` (below) deliberately does NOT mirror `updateSeenStatus`'s
+// stake-gated sender bump: since an unstaked sender's `opsSeen` never leaves 0,
+// `ReputationEntry.isBanned`/`isThrottled`'s `floor(seen / denominator) > included + slack`
+// reduces to `0 > included + slack`, which is never true regardless of `included` -
+// bumping it unconditionally cannot change that entity's ban/throttle outcome.
+
+// the three roles a `FrameTxMempoolEntry` can resolve, from its
+// validation-prefix-derived `sender`/`factory`/`payer` fields. There is no
+// `aggregator` concept under EIP-8141.
+type EntityTitle = "sender" | "factory" | "payer";
 
 export class MempoolReputationChecks {
   constructor(
     private service: MempoolService,
-    private entryPointService: EntryPointService,
     private reputationService: ReputationService,
     private networkConfig: NetworkConfig
   ) {}
 
+  /**
+   * `senderInfo` is `undefined` for the Self Relay validation-prefix shape
+   * (no dedicated "sender" frame - see `FrameTxMempoolEntry`'s class doc
+   * comment), not because the caller skipped a lookup. That shape's
+   * sender IS its own payer (`resolveRoleAddr`/`FrameTxMempoolEntry.
+   * resolveRoles` both resolve `payer` to `tx.sender` when the payer
+   * frame's target is null, which is always true for Self Relay), so its
+   * count/ban/throttle gating still happens correctly - through the
+   * `payerInfo`/"payer" bucket below, against
+   * `calculateMaxAllowedMempoolOpsUnstaked` rather than the flat
+   * `MAX_MEMPOOL_USEROPS_PER_SENDER` the dedicated "sender" bucket uses.
+   * Different threshold formula, same entity, still genuinely gated - not
+   * silently skipped the way it was before `senderInfo`/`factoryInfo`/
+   * `payerInfo` were wired through from real validation.
+   */
   async checkEntityCountInMempool(
     entry: MempoolEntry,
-    accountInfo: StakeInfo,
+    senderInfo: StakeInfo | undefined,
     factoryInfo: StakeInfo | undefined,
-    paymasterInfo: StakeInfo | undefined,
-    aggregatorInfo: StakeInfo | undefined
+    payerInfo: StakeInfo | undefined
   ): Promise<void> {
     const mEntries = await this.service.fetchPendingUserOps();
-    const titles: IEntityWithAggregator[] = [
-      "account",
-      "factory",
-      "paymaster",
-      "aggregator",
-    ];
-    const count = [1, 1, 1, 1]; // starting all values from one because `entry` param counts as well
-    const stakes = [accountInfo, factoryInfo, paymasterInfo, aggregatorInfo];
+    const titles: EntityTitle[] = ["sender", "factory", "payer"];
+    const count = [1, 1, 1]; // starting all values from one because `entry` param counts as well
+    // What the per-entity cap is checked against: `count` minus every keyed
+    // entry in which the entity is that entry's own sender (see `exempt`).
+    const cappedCount = [1, 1, 1];
+    const stakes = [senderInfo, factoryInfo, payerInfo];
     for (const mEntry of mEntries) {
-      if (getAddress(mEntry.userOp.sender) == getAddress(accountInfo.addr)) {
+      const mKeyed = isKeyedNonce(mEntry.tx);
+      if (
+        senderInfo &&
+        getAddress(mEntry.sender) == getAddress(senderInfo.addr)
+      ) {
         count[0]++;
+        if (!mKeyed) cappedCount[0]++;
       }
-      // counts the number of similar factories, paymasters and aggregator in the mempool
-      for (let i = 1; i < 4; ++i) {
-        const mEntity = mEntry[titles[i] as keyof MempoolEntry] as string;
-        if(mEntity === INITCODE_EIP7702_MARKER) {
-          continue;
-        }
+      // counts the number of similar factories and payers in the mempool
+      for (let i = 1; i < 3; ++i) {
+        const mEntity = mEntry[titles[i] as keyof MempoolEntry] as
+          | string
+          | undefined;
         if (
           stakes[i] &&
           mEntity &&
           getAddress(mEntity) == getAddress(stakes[i]!.addr)
         ) {
           count[i]++;
+          if (!(mKeyed && getAddress(mEntity) === getAddress(mEntry.sender))) {
+            cappedCount[i]++;
+          }
         }
       }
     }
+    // EIP-8250: a sender's keyed txs on disjoint keys cannot block each other
+    // at the nonce level, so they are not capped per sender - neither through
+    // the "sender" bucket nor, for self-pay (Self Relay), through the
+    // "payer"/"factory" bucket that is the sender itself. Linear txs keep the
+    // cap, counted among linear txs only. A third-party payer/factory is
+    // capped as before, keyed or not; ban/throttle status still applies.
+    const exempt = (stake: StakeInfo): boolean =>
+      isKeyedNonce(entry.tx) &&
+      getAddress(stake.addr) === getAddress(entry.sender);
 
     // check for ban
     for (const [index, stake] of stakes.entries()) {
@@ -104,7 +135,7 @@ export class MempoolReputationChecks {
           : this.reputationService.calculateMaxAllowedMempoolOpsUnstaked(
               reputationEntry!
             );
-      if (count[index] > maxMempoolCount) {
+      if (!exempt(stake) && cappedCount[index] > maxMempoolCount) {
         const checkStake = await this.reputationService.checkStake(stake);
         if (checkStake.code !== 0) {
           throw new RpcError(checkStake.msg, checkStake.code);
@@ -113,28 +144,45 @@ export class MempoolReputationChecks {
     }
   }
 
+  /**
+   * Catches one entity acting as a plain "sender" in one mempool entry
+   * while ALSO acting as a "payer"/"factory" for a DIFFERENT entity's entry
+   * - the reputation-gaming vector this check exists for (payer/factory
+   * reputation counts differently from a plain sender's).
+   *
+   * Self-pay is explicitly excluded from both directions of that
+   * comparison: `payer === sender` within the SAME entry (every Self Relay
+   * transaction - `FrameTxMempoolEntry`'s class doc comment) is the same
+   * entity in the same entry, not a different entity double-dipping. Without
+   * this exclusion, a self-relay sender's own SECOND pending entry (a
+   * different nonce, same address) would collide with its first: `sender`
+   * would already appear in `otherEntities` (pushed as the first entry's
+   * `payer`, itself) and `payer` would already appear in `accounts` (pushed
+   * as the first entry's `sender`) - rejecting completely ordinary usage
+   * (a self-relay sender with more than one transaction pending at once).
+   * `getKnownEntities()` carries the matching half of this exclusion, for
+   * the `otherEntities` direction.
+   */
   async checkMultipleRolesViolation(entry: MempoolEntry): Promise<void> {
-    const { userOp, entryPoint } = entry;
+    const { sender, payer, factory } = entry;
     const { otherEntities, accounts } = await this.getKnownEntities();
-    if (otherEntities.includes(getAddress(userOp.sender))) {
+    if (otherEntities.includes(getAddress(sender))) {
       throw new RpcError(
-        `The sender address "${userOp.sender}" is used as a different entity in another UserOperation currently in mempool`,
+        `The sender address "${sender}" is used as a different entity in another UserOperation currently in mempool`,
         RpcErrorCodes.INVALID_OPCODE
       );
     }
 
-    const paymaster = this.entryPointService.getPaymaster(entryPoint, userOp);
-    if (paymaster) {
-      if (accounts.includes(getAddress(paymaster))) {
+    if (payer && getAddress(payer) !== getAddress(sender)) {
+      if (accounts.includes(getAddress(payer))) {
         throw new RpcError(
-          `A Paymaster at ${paymaster} in this UserOperation is used as a sender entity in another UserOperation currently in mempool.`,
+          `A Payer at ${payer} in this UserOperation is used as a sender entity in another UserOperation currently in mempool.`,
           RpcErrorCodes.INVALID_OPCODE
         );
       }
     }
 
-    const factory = this.entryPointService.getFactory(entryPoint, userOp);
-    if (factory && factory !== INITCODE_EIP7702_MARKER) {
+    if (factory && getAddress(factory) !== getAddress(sender)) {
       if (accounts.includes(getAddress(factory))) {
         throw new RpcError(
           `A Factory at ${factory} in this UserOperation is used as a sender entity in another UserOperation currently in mempool.`,
@@ -144,28 +192,29 @@ export class MempoolReputationChecks {
     }
   }
 
+  /**
+   * `senderInfo` is `undefined` for the Self Relay shape (see
+   * `checkEntityCountInMempool`'s comment on why) - the sender-specific
+   * "bump only if staked" branch below is skipped in that case, but
+   * `payer`/`factory` are unconditional and unaffected: for Self Relay,
+   * `payer` already equals `sender`, so that branch still bumps the same
+   * entity's seen-status regardless.
+   */
   async updateSeenStatus(
-    entryPoint: string,
-    userOp: UserOperation,
-    stakeInfo: StakeInfo,
-    aggregator?: string
+    entry: MempoolEntry,
+    senderInfo: StakeInfo | undefined
   ): Promise<void> {
-    const paymaster = this.entryPointService.getPaymaster(entryPoint, userOp);
-    const factory = this.entryPointService.getFactory(entryPoint, userOp);
+    const { sender, payer, factory } = entry;
     const isStaked =
-      BigInt(stakeInfo.stake) >= (this.networkConfig.minStake!) &&
-      BigInt(stakeInfo.unstakeDelaySec) >= (
-        this.networkConfig.minUnstakeDelay
-      );
+      senderInfo != null &&
+      BigInt(senderInfo.stake) >= this.networkConfig.minStake! &&
+      BigInt(senderInfo.unstakeDelaySec) >= this.networkConfig.minUnstakeDelay;
 
     if (isStaked) {
-      await this.reputationService.updateSeenStatus(userOp.sender);
+      await this.reputationService.updateSeenStatus(sender);
     }
-    if (aggregator) {
-      await this.reputationService.updateSeenStatus(aggregator);
-    }
-    if (paymaster) {
-      await this.reputationService.updateSeenStatus(paymaster);
+    if (payer) {
+      await this.reputationService.updateSeenStatus(payer);
     }
     if (factory) {
       await this.reputationService.updateSeenStatus(factory);
@@ -173,7 +222,28 @@ export class MempoolReputationChecks {
   }
 
   /**
-   * returns a list of addresses of all entities in the mempool
+   * Bumps `included` for every distinct entity address this entry names,
+   * once each - unlike `updateSeenStatus`, unconditionally (no fresh stake
+   * lookup gates the sender here; see this file's header comment for why
+   * that's harmless). A `Set` avoids double-counting a Self Relay entry,
+   * whose `payer` always equals its `sender`.
+   */
+  async updateIncludedStatus(entry: MempoolEntry): Promise<void> {
+    const { sender, payer, factory } = entry;
+    const addresses = new Set<string>([sender]);
+    if (payer) addresses.add(payer);
+    if (factory) addresses.add(factory);
+    for (const address of addresses) {
+      await this.reputationService.updateIncludedStatus(address);
+    }
+  }
+
+  /**
+   * Returns a list of addresses of all entities in the mempool. `payer`/
+   * `factory` are excluded from `otherEntities` when they equal that same
+   * entry's own `sender` (self-pay) - see `checkMultipleRolesViolation`'s
+   * doc comment for why: self-pay is not "a different entity," so it must
+   * not make a sender's own address collide with itself there.
    */
   private async getKnownEntities(): Promise<KnownEntities> {
     const entities: KnownEntities = {
@@ -182,14 +252,12 @@ export class MempoolReputationChecks {
     };
     const entries = await this.service.fetchPendingUserOps();
     for (const entry of entries) {
-      entities.accounts.push(getAddress(entry.userOp.sender));
-      if (entry.paymaster && entry.paymaster.length >= 42) {
-        entities.otherEntities.push(
-          getAddress(getAddr(entry.paymaster as Hex)!)
-        );
+      entities.accounts.push(getAddress(entry.sender));
+      if (entry.payer && getAddress(entry.payer) !== getAddress(entry.sender)) {
+        entities.otherEntities.push(getAddress(entry.payer));
       }
-      if (entry.factory && entry.factory.length >= 42) {
-        entities.otherEntities.push(getAddress(getAddr(entry.factory as Hex)!));
+      if (entry.factory && getAddress(entry.factory) !== getAddress(entry.sender)) {
+        entities.otherEntities.push(getAddress(entry.factory));
       }
     }
     return entities;

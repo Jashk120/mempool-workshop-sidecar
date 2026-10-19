@@ -1,5 +1,5 @@
 import { pipe } from "it-pipe";
-import { PeerId } from "@libp2p/interface-peer-id";
+import { PeerId } from "@libp2p/interface";
 import { Libp2p } from "libp2p";
 import { Uint8ArrayList } from "uint8arraylist";
 import { ErrorAborted, withTimeout, TimeoutError } from "@skandha/utils/lib";
@@ -122,7 +122,7 @@ export async function* sendRequest<Req, Resp>(
     });
 
     // Parse protocol selected by the responder
-    const protocolId = stream.stat.protocol ?? "unknown";
+    const protocolId = stream.protocol ?? "unknown";
     const protocol = protocolsMap.get(protocolId);
     if (!protocol)
       throw Error(`dialProtocol selected unknown protocolId ${protocolId}`);
@@ -230,7 +230,11 @@ export async function* sendRequest<Req, Resp>(
       // Necessary to call `stream.close()` since collectResponses() may break out of the source before exhausting it
       // `stream.close()` libp2p-mplex will .end() the source (it-pushable instance)
       // If collectResponses() exhausts the source, it-pushable.end() can be safely called multiple times
-      stream.close();
+      // close() is async (@libp2p/interface@2.x) and may reject (e.g. if the
+      // stream/connection is already gone) - awaited so it isn't a floating
+      // rejection, but swallowed since a close failure here shouldn't mask
+      // whatever this finally block is already unwinding from.
+      await stream.close().catch(() => {});
     }
   } catch (e) {
     logger.debug({ logCtx, e: e as Error }, "Req  error");

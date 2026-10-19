@@ -1,6 +1,13 @@
-import { PeerId } from "@libp2p/interface-peer-id";
+import { PeerId } from "@libp2p/interface";
 import { Libp2p } from "libp2p";
+import { ValueOf } from "@chainsafe/ssz";
 import { ts } from "@skandha/types/lib/index.js";
+import {
+  PooledFrameTxHashesRequest as PooledFrameTxHashesRequestSsz,
+  PooledFrameTxHashes as PooledFrameTxHashesSsz,
+  PooledFrameTxsByHashRequest as PooledFrameTxsByHashRequestSsz,
+  PooledFrameTxsByHash as PooledFrameTxsByHashSsz,
+} from "@skandha/types/lib/node/frameTx.js";
 import { Logger } from "@skandha/api/lib/logger";
 import { AllChainsMetrics } from "@skandha/monitoring/lib/index.js";
 import * as reqRespProtocols from "../../reqresp/protocols/index.js";
@@ -172,31 +179,27 @@ export class ReqRespNode extends ReqResp implements IReqRespNode {
     );
   }
 
-  async pooledUserOpHashes(
+  async pooledFrameTxHashes(
     peerId: PeerId,
-    req: ts.PooledUserOpHashesRequest
-  ): Promise<ts.PooledUserOpHashes> {
+    req: ValueOf<typeof PooledFrameTxHashesRequestSsz>
+  ): Promise<ValueOf<typeof PooledFrameTxHashesSsz>> {
     return collectExactOne(
-      this.sendRequest<ts.PooledUserOpHashesRequest, ts.PooledUserOpHashes>(
-        peerId,
-        ReqRespMethod.PooledUserOpHashes,
-        [Version.V1],
-        req
-      )
+      this.sendRequest<
+        ValueOf<typeof PooledFrameTxHashesRequestSsz>,
+        ValueOf<typeof PooledFrameTxHashesSsz>
+      >(peerId, ReqRespMethod.PooledFrameTxHashes, [Version.V1], req)
     );
   }
 
-  async pooledUserOpsByHash(
+  async pooledFrameTxsByHash(
     peerId: PeerId,
-    req: ts.PooledUserOpsByHashRequest
-  ): Promise<ts.PooledUserOpsByHash> {
+    req: ValueOf<typeof PooledFrameTxsByHashRequestSsz>
+  ): Promise<ValueOf<typeof PooledFrameTxsByHashSsz>> {
     return collectExactOne(
-      this.sendRequest<ts.PooledUserOpsByHashRequest, ts.PooledUserOpsByHash>(
-        peerId,
-        ReqRespMethod.PooledUserOpsByHash,
-        [Version.V1],
-        req
-      )
+      this.sendRequest<
+        ValueOf<typeof PooledFrameTxsByHashRequestSsz>,
+        ValueOf<typeof PooledFrameTxsByHashSsz>
+      >(peerId, ReqRespMethod.PooledFrameTxsByHash, [Version.V2], req)
     );
   }
 
@@ -297,28 +300,28 @@ export class ReqRespNode extends ReqResp implements IReqRespNode {
     yield { type: EncodedPayloadType.ssz, data: this.metadataController.json };
   }
 
-  private async *onPooledUserOpHashes(
-    req: ts.PooledUserOpHashesRequest,
+  private async *onPooledFrameTxHashes(
+    req: ValueOf<typeof PooledFrameTxHashesRequestSsz>,
     peerId: PeerId
-  ): AsyncIterable<EncodedPayload<ts.PooledUserOpHashes>> {
+  ): AsyncIterable<EncodedPayload<ValueOf<typeof PooledFrameTxHashesSsz>>> {
     this.onIncomingRequestBody(
-      { method: ReqRespMethod.PooledUserOpHashes, body: req },
+      { method: ReqRespMethod.PooledFrameTxHashes, body: req },
       peerId
     );
 
-    yield* this.reqRespHandlers.onPooledUserOpHashes(req, peerId);
+    yield* this.reqRespHandlers.onPooledFrameTxHashes(req, peerId);
   }
 
-  private async *onPooledUserOpsByHash(
-    req: ts.PooledUserOpsByHashRequest,
+  private async *onPooledFrameTxsByHash(
+    req: ValueOf<typeof PooledFrameTxsByHashRequestSsz>,
     peerId: PeerId
-  ): AsyncIterable<EncodedPayload<ts.PooledUserOpsByHash>> {
+  ): AsyncIterable<EncodedPayload<ValueOf<typeof PooledFrameTxsByHashSsz>>> {
     this.onIncomingRequestBody(
-      { method: ReqRespMethod.PooledUserOpsByHash, body: req },
+      { method: ReqRespMethod.PooledFrameTxsByHash, body: req },
       peerId
     );
 
-    yield* this.reqRespHandlers.onPooledUserOpsByHash(req, peerId);
+    yield* this.reqRespHandlers.onPooledFrameTxsByHash(req, peerId);
   }
 
   private getProtocols(): ProtocolDefinitionAny[] {
@@ -329,13 +332,13 @@ export class ReqRespNode extends ReqResp implements IReqRespNode {
       reqRespProtocols.Status(modules, this.onStatus.bind(this)),
       reqRespProtocols.Goodbye(modules, this.onGoodbye.bind(this)),
       reqRespProtocols.Metadata(modules, this.onMetadata.bind(this)),
-      reqRespProtocols.PooledUserOpHashes(
+      reqRespProtocols.PooledFrameTxHashes(
         modules,
-        this.onPooledUserOpHashes.bind(this)
+        this.onPooledFrameTxHashes.bind(this)
       ),
-      reqRespProtocols.PooledUserOpsByHash(
+      reqRespProtocols.PooledFrameTxsByHash(
         modules,
-        this.onPooledUserOpsByHash.bind(this)
+        this.onPooledFrameTxsByHash.bind(this)
       ),
     ];
     return protocols;

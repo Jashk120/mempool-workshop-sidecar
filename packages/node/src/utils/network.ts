@@ -1,12 +1,8 @@
 import os from "node:os";
-import type { PeerId } from "@libp2p/interface-peer-id";
+import type { PeerId } from "@libp2p/interface";
 import type { Multiaddr } from "@multiformats/multiaddr";
-import type { Connection } from "@libp2p/interface-connection";
-import type { ConnectionManager } from "@libp2p/interface-connection-manager";
-import type { Components } from "libp2p/components";
-import type { DefaultConnectionManager } from "libp2p/connection-manager";
-import type { DefaultDialer } from "libp2p/connection-manager/dialer";
-import type { SignableENR } from "@chainsafe/discv5";
+import type { Connection } from "@libp2p/interface";
+import type { SignableENR } from "@chainsafe/enr";
 import type { Libp2p } from "../network/interface.js";
 
 // peers
@@ -70,22 +66,32 @@ export function prettyPrintPeerId(peerId: PeerId): string {
 }
 
 /**
- * Get the connections map from a connection manager
+ * Get a peerIdStr -> open connections map for a libp2p node.
+ *
+ * libp2p 1.x+ no longer exposes a `.connectionManager` sub-object with an
+ * internal `connections` map (the whole Components pattern is gone) - the
+ * public replacement is `Libp2p#getConnections()`, grouped here by remote
+ * peer id string to preserve the shape this codebase expects.
  */
-// Compat function for type mismatch reasons
-export function getConnectionsMap(
-  connectionManager: ConnectionManager
-): Map<string, Connection[]> {
-  return (connectionManager as unknown as DefaultConnectionManager)[
-    "connections"
-  ] as Map<string, Connection[]>;
+export function getConnectionsMap(libp2p: Libp2p): Map<string, Connection[]> {
+  const map = new Map<string, Connection[]>();
+  for (const connection of libp2p.getConnections()) {
+    const peerIdStr = connection.remotePeer.toString();
+    const connections = map.get(peerIdStr);
+    if (connections) {
+      connections.push(connection);
+    } else {
+      map.set(peerIdStr, [connection]);
+    }
+  }
+  return map;
 }
 
 export function getConnection(
-  connectionManager: ConnectionManager,
+  libp2p: Libp2p,
   peerIdStr: string
 ): Connection | undefined {
-  return getConnectionsMap(connectionManager).get(peerIdStr)?.[0] ?? undefined;
+  return getConnectionsMap(libp2p).get(peerIdStr)?.[0] ?? undefined;
 }
 
 // https://github.com/ChainSafe/js-libp2p-gossipsub/blob/3475242ed254f7647798ab7f36b21909f6cb61da/src/index.ts#L2009
@@ -93,7 +99,18 @@ export function isPublishToZeroPeersError(e: Error): boolean {
   return e.message.includes("PublishError.InsufficientPeers");
 }
 
-export function getDefaultDialer(libp2p: Libp2p): DefaultDialer {
-  return (libp2p as unknown as { components: Components }).components
-    .dialer as DefaultDialer;
+/**
+ * True if libp2p has a dial to `peerIdStr` queued or in progress.
+ *
+ * libp2p 1.x+ no longer exposes a `.components.dialer.pendingDials` map -
+ * the public replacement is `Libp2p#getDialQueue()`.
+ */
+export function isDialingPeer(libp2p: Libp2p, peerIdStr: string): boolean {
+  return libp2p
+    .getDialQueue()
+    .some(
+      (dial) =>
+        dial.peerId?.toString() === peerIdStr &&
+        (dial.status === "queued" || dial.status === "active")
+    );
 }

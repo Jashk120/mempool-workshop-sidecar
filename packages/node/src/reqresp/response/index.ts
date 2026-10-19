@@ -1,6 +1,6 @@
 import { pipe } from "it-pipe";
-import { PeerId } from "@libp2p/interface-peer-id";
-import { Stream } from "@libp2p/interface-connection";
+import { PeerId } from "@libp2p/interface";
+import { Stream } from "@libp2p/interface";
 import { Uint8ArrayList } from "uint8arraylist";
 import { TimeoutError, withTimeout } from "@skandha/utils/lib";
 import { Logger } from "@skandha/api/lib/logger";
@@ -139,7 +139,11 @@ export async function handleRequest<Req, Resp>({
   // If streak.sink throws, libp2p-mplex will close stream.source
   // If `requestDecode()` throws the stream.source must be closed manually
   // To ensure the stream.source it-pushable instance is always closed, stream.close() is called always
-  stream.close();
+  // close() is async (@libp2p/interface@2.x) and may reject (e.g. if the
+  // stream/connection is already gone) - awaited so it isn't a floating
+  // rejection, swallowed since a close failure here shouldn't turn into a
+  // request-handling error.
+  await stream.close().catch(() => {});
 
   // TODO: It may happen that stream.sink returns before returning stream.source first,
   // so you never see "Resp received request" in the logs and the response ends without

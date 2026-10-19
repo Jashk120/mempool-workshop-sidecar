@@ -1,6 +1,7 @@
 import { ValueOf } from "@chainsafe/ssz";
 export * from "./primitive/types.js";
 import * as ssz from "./sszTypes.js";
+import * as nodeSsz from "./node/frameTx.js";
 
 export type Metadata = ValueOf<typeof ssz.Metadata>;
 export type UserOp = ValueOf<typeof ssz.UserOp>;
@@ -18,6 +19,7 @@ export type PooledUserOpsByHashRequest = ValueOf<
   typeof ssz.PooledUserOpsByHashRequest
 >;
 export type PooledUserOpsByHash = ValueOf<typeof ssz.PooledUserOpsByHash>;
+export type VerifiedFrameTx = ValueOf<typeof nodeSsz.VerifiedFrameTx>;
 
 export type addPrefix<TKey, TPrefix extends string> = TKey extends string
   ? `${TPrefix}${TKey}`

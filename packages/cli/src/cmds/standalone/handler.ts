@@ -41,6 +41,7 @@ export async function bundlerHandler(
       testingMode,
       unsafeMode,
       redirectRpc,
+      explorer: args["explorer.enable"],
     });
   } catch (err) {
     if (err instanceof Error && err.message.indexOf("chain id") > -1) {
@@ -53,6 +54,7 @@ export async function bundlerHandler(
       testingMode,
       unsafeMode,
       redirectRpc,
+      explorer: args["explorer.enable"],
     });
   }
 

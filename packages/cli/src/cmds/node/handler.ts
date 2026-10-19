@@ -47,6 +47,7 @@ export async function nodeHandler(args: IGlobalArgs): Promise<void> {
       testingMode: params.testingMode,
       unsafeMode: params.unsafeMode,
       redirectRpc: params.redirectRpc,
+      explorer: args["explorer.enable"],
     });
   } catch (err) {
     if (err instanceof Error && err.message.indexOf("chain id") > -1) {
@@ -59,6 +60,7 @@ export async function nodeHandler(args: IGlobalArgs): Promise<void> {
       testingMode: params.testingMode,
       unsafeMode: params.unsafeMode,
       redirectRpc: params.redirectRpc,
+      explorer: args["explorer.enable"],
     });
   }
 

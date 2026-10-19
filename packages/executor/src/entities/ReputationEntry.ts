@@ -33,13 +33,17 @@ export class ReputationEntry implements IReputationEntry {
   }
 
   get opsSeen(): number {
-    const elapsedHours = Math.floor((now() - this.lastUpdateTime) / 3600);
+    // `now()` returns milliseconds (`Date.getTime()`), so the divisor must
+    // be milliseconds-per-hour (3_600_000), not seconds-per-hour (3600) -
+    // using 3600 made 24 real hours of intended decay finish in ~86 real
+    // seconds instead.
+    const elapsedHours = Math.floor((now() - this.lastUpdateTime) / 3_600_000);
     const newRep = Math.floor(this._opsSeen * (1 - elapsedHours * (1 / 24)));
     return Math.max(newRep, 0);
   }
 
   get opsIncluded(): number {
-    const elapsedHours = Math.floor((now() - this.lastUpdateTime) / 3600);
+    const elapsedHours = Math.floor((now() - this.lastUpdateTime) / 3_600_000);
     const newRep = Math.floor(
       this._opsIncluded * (1 - elapsedHours * (1 / 24))
     );

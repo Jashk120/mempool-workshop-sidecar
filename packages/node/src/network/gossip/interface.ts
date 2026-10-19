@@ -1,13 +1,48 @@
 import { EventEmitter } from "events";
 import { Libp2p } from "libp2p";
-import { Message, TopicValidatorResult } from "@libp2p/interface-pubsub";
+import type { PeerId, PublicKey } from "@libp2p/interface";
 import StrictEventEmitter from "strict-event-emitter-types";
 import { PeerIdStr } from "@chainsafe/libp2p-gossipsub/types";
 import { ts } from "@skandha/types/lib/index.js";
 import { NetworkEvent } from "../events.js";
 
+// gossipsub 14.x (and its pubsub base class) types its public API against a
+// nested, older major of @libp2p/interface (2.x) that no longer ships from
+// the root package (3.x, used everywhere else in this codebase) - the
+// pubsub-specific types below were dropped from @libp2p/interface entirely
+// in that major. Message/TopicValidatorResult are redeclared locally here,
+// matching gossipsub's own shapes/string-enum values field-for-field, so
+// values crossing the gossipsub boundary remain structurally and (for the
+// string enum) runtime compatible without depending on gossipsub's
+// inaccessible nested package.
+export type UnsignedGossipMessage = {
+  type: "unsigned";
+  topic: string;
+  data: Uint8Array;
+};
+export type SignedGossipMessage = {
+  type: "signed";
+  from: PeerId;
+  topic: string;
+  data: Uint8Array;
+  sequenceNumber: bigint;
+  signature: Uint8Array;
+  key: PublicKey;
+};
+export type Message = UnsignedGossipMessage | SignedGossipMessage;
+
+export enum TopicValidatorResult {
+  Accept = "accept",
+  Ignore = "ignore",
+  Reject = "reject",
+}
+
 export enum GossipType {
-  user_operation = "user_operation",
+  // `_v2`: the gossiped FrameTransaction carries EIP-8250 nonce_keys/nonce_seq
+  // and EIP-8272 recent_root_references. Renaming the topic keeps nodes on the
+  // old SSZ shape off it entirely, rather than failing to decode (and
+  // downscoring) each other's messages.
+  frame_transaction = "frame_transaction_v2",
 }
 
 export enum GossipEncoding {
@@ -21,8 +56,8 @@ export interface IGossipTopic {
 }
 
 export type GossipTopicTypeMap = {
-  [GossipType.user_operation]: {
-    type: GossipType.user_operation;
+  [GossipType.frame_transaction]: {
+    type: GossipType.frame_transaction;
   };
 };
 
@@ -36,12 +71,12 @@ export type GossipTopicMap = {
 export type GossipTopic = GossipTopicMap[keyof GossipTopicMap];
 
 export type GossipTypeMap = {
-  [GossipType.user_operation]: ts.VerifiedUserOperation;
+  [GossipType.frame_transaction]: ts.VerifiedFrameTx;
 };
 
 export type GossipFnByType = {
-  [GossipType.user_operation]: (
-    userOpsWithEP: ts.VerifiedUserOperation
+  [GossipType.frame_transaction]: (
+    verifiedFrameTx: ts.VerifiedFrameTx
   ) => Promise<void> | void;
 };
 
