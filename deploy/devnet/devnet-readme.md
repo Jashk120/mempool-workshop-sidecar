@@ -63,7 +63,7 @@ address (1 ETH, once per hour per address; see
 [`docs/skandha_explorer.md`](../../docs/skandha_explorer.md#skandha_explorer_faucet)):
 
 ```sh
-curl -s https://altmempool.forshtat.com/rpc -H 'content-type: application/json' \
+curl -s https://altmempoolgateway.forshtat.com/rpc -H 'content-type: application/json' \
   --data '{"jsonrpc":"2.0","id":1,"method":"skandha_explorer_faucet","params":["0xYourAddress"]}'
 ```
 

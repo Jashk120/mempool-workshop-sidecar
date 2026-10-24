@@ -298,26 +298,6 @@ silently disables gossip. Both RPC endpoints point at the local ethrex, which is
 `NaiveStakingRegistry` (see [deployments/devnet.md](../../deployments/devnet.md)); confirm a
 running node picked it up with `skandha_config`.
 
-The miner also serves the faucet (`skandha_explorer_faucet`, the explorer's "Faucet" button). It
-needs its own account, **not** the throwaway genesis key above, which is published in this repo:
-anyone could drain it. Generate a fresh key, send it a bounded amount from the genesis account
-(this is the most the faucet can ever give away), and put the key in a root-only env file that the
-unit passes into the container:
-
-```sh
-# --- on the VM ---
-KEY=0x$(openssl rand -hex 32)
-echo "SKANDHA_FAUCET_KEY=$KEY" | sudo tee /etc/skandha-miner.env >/dev/null
-sudo chmod 600 /etc/skandha-miner.env
-```
-
-Start the node (below); its log prints the faucet account's address. Fund that address (e.g. 5,000
-ETH from the genesis key, with any wallet or `cast send`).
-
-Without `SKANDHA_FAUCET_KEY` the node starts normally and just has no faucet (`info` omits
-`faucetEnabled`, the explorer hides the button). The limits are one request per address per hour
-and 100 per hour overall; see [`docs/skandha_explorer.md`](../../docs/skandha_explorer.md#skandha_explorer_faucet).
-
 Run it as a service. Replace `alexf` with your user and `34.67.41.151` with the reserved IP
 (`$IP`); the ENR host must be the public address, not the internal one:
 
@@ -330,11 +310,9 @@ Requires=docker.service
 
 [Service]
 Type=simple
-EnvironmentFile=/etc/skandha-miner.env
 ExecStartPre=-/usr/bin/docker rm -f skandha-miner
 ExecStartPre=/usr/bin/docker pull ghcr.io/forshtat/framepool:develop-latest
 ExecStart=/usr/bin/docker run --rm --name skandha-miner --network host \
-  -e SKANDHA_FAUCET_KEY \
   -v /home/alexf/skandha/config.json:/usr/app/config.json:ro \
   -v /home/alexf/skandha-data:/usr/app/data \
   ghcr.io/forshtat/framepool:develop-latest node \
@@ -355,13 +333,7 @@ WantedBy=multi-user.target
 sudo systemctl daemon-reload && sudo systemctl enable --now skandha-miner
 curl -s localhost:14337/rpc -H 'content-type: application/json' \
   --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}'
-curl -s localhost:14337/rpc -H 'content-type: application/json' \
-  --data '{"jsonrpc":"2.0","id":1,"method":"skandha_explorer_info","params":[]}'   # "faucetEnabled": true
 ```
-
-The node logs `[x] FAUCET (skandha_explorer_faucet, from 0x…)` at start; that address is the one to
-fund and to keep topped up. `-e SKANDHA_FAUCET_KEY` (no value) makes Docker copy the variable from
-the unit's environment, so the key never appears on the command line.
 
 `auto` bundling is required: only the auto-mode cron runs `MempoolReconciler`, which is what marks
 a transaction `OnChain`. `--p2p.retainPeerId` keeps the ENR stable across restarts. The node's ENR
@@ -410,13 +382,6 @@ curl -s -X POST https://$DOMAIN -H 'content-type: application/json' \
   --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}'        # ethrex -> 0x539
 curl -s -X POST https://$DOMAIN/rpc -H 'content-type: application/json' \
   --data '{"jsonrpc":"2.0","id":1,"method":"skandha_config","params":[]}'     # Skandha
-```
-
-Check the faucet with a throwaway address (it sends 1 ETH, once per address per hour):
-
-```sh
-curl -s -X POST https://$DOMAIN/rpc -H 'content-type: application/json' \
-  --data '{"jsonrpc":"2.0","id":1,"method":"skandha_explorer_faucet","params":["0x000000000000000000000000000000000000dEaD"]}'
 ```
 
 Then send a frame transaction as in `devnet-readme.md` section 2.2; it should reach `OnChain` in
@@ -484,6 +449,7 @@ After=network.target
 Type=simple
 User=alexf
 WorkingDirectory=/home/alexf/skandha
+EnvironmentFile=/etc/skandha-gateway.env
 ExecStart=/home/alexf/.bun/bin/bun --bun /home/alexf/skandha/packages/cli/bin/skandha.js node \
   --configFile /home/alexf/skandha/config.json --dataDir /home/alexf/skandha-data \
   --api.address 0.0.0.0 --api.port 14337 --api.wsPort 14337 \
@@ -503,6 +469,37 @@ transactions it holds, so a transaction it forwarded shows `OnChain` (or `Revert
 the miner has included it. It stays `New` on the gateway only until then. The miner's ENR is in its
 log (`journalctl -u skandha-miner | grep 'ENR:'`); it stays the same as long as `--p2p.retainPeerId`
 is set and the enrHost does not change.
+
+**The faucet runs on the gateway.** Everything a workshop participant does goes through the gateway
+(`https://altmempoolgateway.forshtat.com/rpc`): frame transactions, raw transactions (which it
+forwards to ethrex), `eth_*` reads and the faucet (`skandha_explorer_faucet`, the explorer's "Faucet"
+button). It needs its own account, **not** the throwaway genesis key above, which is published in this
+repo: anyone could drain it. Generate a fresh key, send it a bounded amount from the genesis account
+(this is the most the faucet can ever give away), and put the key in a root-only env file that the
+unit above reads:
+
+```sh
+# --- on the gateway VM ---
+KEY=0x$(openssl rand -hex 32)
+echo "SKANDHA_FAUCET_KEY=$KEY" | sudo tee /etc/skandha-gateway.env >/dev/null
+sudo chmod 600 /etc/skandha-gateway.env
+sudo systemctl daemon-reload && sudo systemctl restart skandha-gateway
+curl -s localhost:14337/rpc -H 'content-type: application/json' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"skandha_explorer_info","params":[]}'   # "faucetEnabled": true
+```
+
+The node logs `[x] FAUCET (skandha_explorer_faucet, from 0x…)` at start; fund that address (e.g. 5,000
+ETH from the genesis key, with any wallet or `cast send`) and keep it topped up. The faucet sends
+through the gateway's `rpcEndpoint`, the miner's ethrex. Without `SKANDHA_FAUCET_KEY` the node starts
+normally and just has no faucet (`info` omits `faucetEnabled`, the explorer hides the button). The
+limits are one request per address per hour and 100 per hour overall; see
+[`docs/skandha_explorer.md`](../../docs/skandha_explorer.md#skandha_explorer_faucet). Check it with a
+throwaway address (it sends 1 ETH, once per address per hour):
+
+```sh
+curl -s -X POST https://altmempoolgateway.forshtat.com/rpc -H 'content-type: application/json' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"skandha_explorer_faucet","params":["0x000000000000000000000000000000000000dEaD"]}'
+```
 
 TLS: an `A` record `altmempoolgateway` -> `34.132.84.247` on Cloudflare, **DNS only** (Caddy needs
 to reach the origin itself to obtain its certificate), the `eip8141-gateway-web` firewall rule
