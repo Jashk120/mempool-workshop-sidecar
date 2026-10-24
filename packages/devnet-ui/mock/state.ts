@@ -48,6 +48,8 @@ export interface MockNodeOptions {
   chainId?: number;
   explorerEnabled?: boolean;
   p2pEnabled?: boolean;
+  /** Offers `skandha_explorer_faucet` and reports it in `info`. */
+  faucet?: boolean;
   capacity?: number;
   bootId?: string;
   peers?: Peer[];
@@ -243,9 +245,25 @@ export class MockNode {
         return { result: this.options.p2pEnabled === false ? [] : (this.options.peers ?? []) };
       case "skandha_explorer_listReputation":
         return this.listReputation(object);
+      case "skandha_explorer_faucet":
+        return this.faucet(arg);
       default:
         return fail(METHOD_NOT_FOUND, `Method ${method} is not supported`);
     }
+  }
+
+  private faucetRecipients = new Set<string>();
+
+  private faucet(address: unknown): RpcOutcome {
+    if (!this.options.faucet) return fail(METHOD_NOT_FOUND, "Faucet is disabled");
+    if (typeof address !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(address)) {
+      return fail(INVALID_REQUEST, "Expected an address");
+    }
+    if (this.faucetRecipients.has(address.toLowerCase())) {
+      return fail(INVALID_REQUEST, "This address already received funds: try again in 60 min");
+    }
+    this.faucetRecipients.add(address.toLowerCase());
+    return { result: { txHash: `0x${"fa".repeat(32)}`, amount: "1000000000000000000" } };
   }
 
   private info(): Info {
@@ -263,6 +281,7 @@ export class MockNode {
       minInclusionDenominator: 10,
       throttlingSlack: 10,
       banSlack: 50,
+      ...(this.options.faucet ? { faucetEnabled: true } : {}),
     };
   }
 

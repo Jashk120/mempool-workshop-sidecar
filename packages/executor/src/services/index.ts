@@ -4,3 +4,4 @@ export * from "./BundlingService/index.js";
 export * from "./ReputationService.js";
 export * from "./SubscriptionService.js";
 export * from "./ExplorerService/index.js";
+export * from "./FaucetService/index.js";

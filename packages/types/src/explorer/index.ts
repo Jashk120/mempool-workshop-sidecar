@@ -193,6 +193,8 @@ export interface ExplorerInfo {
   minInclusionDenominator: number;
   throttlingSlack: number;
   banSlack: number;
+  /** Present and `true` when `skandha_explorer_faucet` is available (1 ETH per request). */
+  faucetEnabled?: boolean;
 }
 
 export interface ExplorerTransactionSummary {

@@ -73,7 +73,10 @@ export class ApiApp {
     this.web3Api = new Web3API(this.executor.web3);
     this.redirectApi = new RedirectAPI(this.config);
     this.skandhaApi = new SkandhaAPI(this.executor.skandha);
-    this.explorerApi = new ExplorerAPI(this.executor.explorer);
+    this.explorerApi = new ExplorerAPI(
+      this.executor.explorer,
+      this.executor.faucet
+    );
 
     // HTTP interface
     this.server.http.post("/rpc/", async (req, res): Promise<void> => {
@@ -328,6 +331,12 @@ export class ApiApp {
             jsonrpc,
             id,
             result: await this.explorerApi.listReputation(params?.[0]),
+          };
+        case CustomRPCMethods.skandha_explorer_faucet:
+          return {
+            jsonrpc,
+            id,
+            result: await this.explorerApi.faucetDrip(params?.[0]),
           };
         case CustomRPCMethods.skandha_frameTransactionStatus:
           result = await this.skandhaApi.getFrameTransactionStatus(params[0]);

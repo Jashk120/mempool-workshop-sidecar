@@ -71,7 +71,8 @@ export class Explorer {
     private minUnstakeDelay: number,
     private minInclusionDenominator: number,
     private throttlingSlack: number,
-    private banSlack: number
+    private banSlack: number,
+    private faucetEnabled = false
   ) {}
 
   private service(): ExplorerService {
@@ -100,6 +101,7 @@ export class Explorer {
       minInclusionDenominator: this.minInclusionDenominator,
       throttlingSlack: this.throttlingSlack,
       banSlack: this.banSlack,
+      ...(this.faucetEnabled ? { faucetEnabled: true } : {}),
     };
   }
 

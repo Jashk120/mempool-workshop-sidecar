@@ -17,6 +17,7 @@ export const CustomRPCMethods = {
   skandha_explorer_getTransaction: "skandha_explorer_getTransaction",
   skandha_explorer_peers: "skandha_explorer_peers",
   skandha_explorer_listReputation: "skandha_explorer_listReputation",
+  skandha_explorer_faucet: "skandha_explorer_faucet",
   skandha_frameTransactionStatus: "skandha_frameTransactionStatus",
   skandha_subscribe: "skandha_subscribe",
   skandha_unsubscribe: "skandha_unsubscribe",

@@ -78,6 +78,13 @@ export const ExplorerInfoSchema = z.object({
   minInclusionDenominator: z.number(),
   throttlingSlack: z.number(),
   banSlack: z.number(),
+  faucetEnabled: z.boolean().optional(),
+});
+
+export const FaucetResultSchema = z.object({
+  txHash: z.string(),
+  /** Wei sent, as a decimal string. */
+  amount: z.string(),
 });
 
 export const TransactionSummarySchema = z.object({

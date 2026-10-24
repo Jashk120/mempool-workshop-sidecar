@@ -17,6 +17,7 @@ import { FrameTxSimulationService } from "./services/FrameTxSimulationService/in
 import { ReceiptService } from "./services/ReceiptService/index.js";
 import { StakingRegistryService } from "./services/StakingRegistryService/index.js";
 import { ExplorerService } from "./services/ExplorerService/service.js";
+import { FaucetService } from "./services/FaucetService/index.js";
 import { Config } from "./config.js";
 import { BundlingMode, GetNodeAPI, NetworkConfig } from "./interfaces.js";
 
@@ -61,6 +62,8 @@ export class Executor {
   public subscriptionService: SubscriptionService;
   // Present only when started with --explorer.enable; records admissions and lifecycle history.
   public explorerService: ExplorerService | null = null;
+  // Present only with --explorer.enable and SKANDHA_FAUCET_KEY set.
+  public faucet: FaucetService | null = null;
 
   private db: IDbController;
 
@@ -84,6 +87,13 @@ export class Executor {
       this.explorerService = new ExplorerService();
       this.explorerService.attach(this.eventBus);
       this.logger.info("[x] EXPLORER (skandha_explorer_* RPC and history)");
+      const faucetWallet = this.config.getFaucetWallet();
+      if (faucetWallet) {
+        this.faucet = new FaucetService(faucetWallet, this.publicClient);
+        this.logger.info(
+          `[x] FAUCET (skandha_explorer_faucet, from ${faucetWallet.account?.address})`
+        );
+      }
     }
     this.subscriptionService = new SubscriptionService(
       this.eventBus,
@@ -204,7 +214,8 @@ export class Executor {
       this.networkConfig.minUnstakeDelay,
       this.networkConfig.minInclusionDenominator,
       this.networkConfig.throttlingSlack,
-      this.networkConfig.banSlack
+      this.networkConfig.banSlack,
+      this.faucet != null
     );
 
     if (this.config.testingMode || options.bundlingMode == "manual") {

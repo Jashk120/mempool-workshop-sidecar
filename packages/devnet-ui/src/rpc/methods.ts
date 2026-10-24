@@ -2,6 +2,7 @@ import { rpcCall, type RpcOptions } from "./client";
 import {
   AdmissionPageSchema,
   ExplorerInfoSchema,
+  FaucetResultSchema,
   PeerListSchema,
   ReputationPageSchema,
   TransactionDetailSchema,
@@ -25,7 +26,7 @@ export interface ListReputationParams {
   limit?: number;
 }
 
-/** Typed wrappers for the six read-only `skandha_explorer_*` methods. */
+/** Typed wrappers for the six read-only `skandha_explorer_*` methods, and the faucet. */
 export const explorerApi = {
   info: (url: string, opts?: RpcOptions) =>
     rpcCall(url, "skandha_explorer_info", [], ExplorerInfoSchema, opts),
@@ -44,4 +45,8 @@ export const explorerApi = {
 
   listReputation: (url: string, params: ListReputationParams = {}, opts?: RpcOptions) =>
     rpcCall(url, "skandha_explorer_listReputation", [params], ReputationPageSchema, opts),
+
+  /** Not read-only: asks the node to send the faucet amount to `address`. */
+  faucet: (url: string, address: string, opts?: RpcOptions) =>
+    rpcCall(url, "skandha_explorer_faucet", [address], FaucetResultSchema, opts),
 };

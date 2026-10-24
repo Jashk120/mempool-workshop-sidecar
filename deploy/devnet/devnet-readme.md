@@ -4,7 +4,7 @@ A public, demonstration-only Ethereum devnet for trying out **EIP-8141 frame tra
 **alternative (frame-tx) mempool**. It runs an ethrex fork (execution) with Lighthouse (consensus),
 plus a Skandha fork that acts as the frame-transaction mempool and relay.
 
-> **This is a throwaway network.** It has no security model, no faucet, no persistence guarantee,
+> **This is a throwaway network.** It has no security model, a small faucet, no persistence guarantee,
 > and may be reset or redeployed at any time. Do not send anything of value to it. Several admin
 > surfaces are deliberately left open (see [Known limitations](#known-limitations)).
 
@@ -30,7 +30,7 @@ plus a Skandha fork that acts as the frame-transaction mempool and relay.
 | **Chain ID** | `1337` (`0x539`) |
 | **Block time** | 6 seconds (`SLOT_DURATION_MS=6000`) |
 | **Currency** | ETH (devnet, worthless) |
-| **Faucet** | none - see below |
+| **Faucet** | "Faucet" button in the explorer, or `skandha_explorer_faucet` - see below |
 
 Both HTTPS routes accept `POST` with a JSON-RPC 2.0 body and send permissive CORS headers
 (`access-control-allow-origin: *`), so browser tooling works. Plain HTTP redirects to HTTPS.
@@ -58,7 +58,20 @@ curl -s -X POST https://altmempool.forshtat.com \
 
 ### Getting funds
 
-There is no faucet. Exactly one account is funded at genesis, with 1,000,000 ETH:
+Ask the faucet: press **Faucet** in the explorer, or call `skandha_explorer_faucet` with your
+address (1 ETH, once per hour per address; see
+[`docs/skandha_explorer.md`](../../docs/skandha_explorer.md#skandha_explorer_faucet)):
+
+```sh
+curl -s https://altmempool.forshtat.com/rpc -H 'content-type: application/json' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"skandha_explorer_faucet","params":["0xYourAddress"]}'
+```
+
+The faucet account is **not** the genesis account. The genesis account (below) is published in this
+repo and also the node's relayer, so anyone can spend it; treat it as an operator key, move most of
+its ETH to a private faucet account, and give the node that account's key in `SKANDHA_FAUCET_KEY`.
+
+For reference, the account funded at genesis, with 1,000,000 ETH:
 
 ```
 address:     0x5544596212F91984C986A919C8026DF0576816f9
@@ -67,10 +80,7 @@ private key: 0x06f911c1ecb2053bb443ba0a0e28d630c583c3c0c2f334a9ecdc8c7c6ad4ea15
 
 This is a throwaway devnet key, committed on purpose in this repo
 (`deploy/devnet/genesis.values.env`, and `MINING_SENDER_PRIVATE_KEY` in `test/e2e/helpers.ts`).
-**Never use it, or any key derived from it, on a real network.** It is also this node's relayer
-account. **Everyone shares it**, so nonce collisions are possible
-if several people send at once. The intended pattern is: generate your own key, fund it once from
-the shared account with a plain transfer, then use your own key.
+**Never use it, or any key derived from it, on a real network.**
 
 ### Testing a staked entity end-to-end
 
@@ -94,7 +104,7 @@ key":**
 
 Walkthrough (Self Relay shape, the only one directly staked by a plain EOA key):
 
-1. Fund your own key from the shared devnet key (see above).
+1. Fund your own key from the faucet (see above).
 2. Call `addStake(86400)` (one day, `MIN_UNSTAKE_DELAY` per ERC-8421) on the deployed
    `NaiveStakingRegistry` from that key, sending **more than** `minStake` as `value` - the
    `BALANCE`/`SELFBALANCE` carve-out specifically checks `stake > minStake` (strictly greater),
@@ -595,7 +605,7 @@ about 60 frame transactions of every kind to both nodes.
   nested calls) is rarely what rejects such a transaction. ethrex gives the same message for no
   funds, out of gas, a loop and a revert; Skandha adds the payer's balance or the frame gas limits
   when it can (see [`docs/ethrex-requests.md`](../../docs/ethrex-requests.md)).
-- **Single shared funded key** (see [Getting funds](#getting-funds)).
+- **Faucet is small and in memory**: per-address and global limits reset on restart (see [Getting funds](#getting-funds)).
 - **Gas for new accounts** is ~204,600, not 21,000 ([2.1](#21-a-plain-transfer-mind-the-gas)).
 - **Privileged submission is one-shot.** If a transaction misses the next payload build, Skandha
   re-submits it on its next 10-second pass, up to three attempts (`maxSubmitAttempts`), then cancels

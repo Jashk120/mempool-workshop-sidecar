@@ -12,7 +12,7 @@ import {
   parseEther,
   getAddress,
 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+import { nonceManager, privateKeyToAccount } from "viem/accounts";
 import { BundlerConfig, ConfigOptions, NetworkConfig } from "./interfaces.js";
 import { getViemChainDef } from "./services/BundlingService/utils/chains.js";
 
@@ -21,6 +21,8 @@ export class Config {
   unsafeMode: boolean;
   redirectRpc: boolean;
   explorerEnabled: boolean;
+  /** Dedicated faucet account, from `SKANDHA_FAUCET_KEY`. Only used with the explorer on. */
+  faucetKey?: Hex;
   config: NetworkConfig;
   chainId: number;
   accounts: Hex[] = [];
@@ -31,6 +33,9 @@ export class Config {
     this.unsafeMode = options.unsafeMode ?? false;
     this.redirectRpc = options.redirectRpc ?? false;
     this.explorerEnabled = options.explorer ?? false;
+    this.faucetKey = this.explorerEnabled
+      ? ((process.env.SKANDHA_FAUCET_KEY || undefined) as Hex | undefined)
+      : undefined;
     this.config = this.getDefaultNetworkConfig(options.config);
     this.chainId = 0;
   }
@@ -77,6 +82,15 @@ export class Config {
       wallets.push(wallet);
     }
     return wallets;
+  }
+
+  getFaucetWallet(): WalletClient | null {
+    if (!this.faucetKey) return null;
+    return createWalletClient({
+      transport: http(this.config.rpcEndpoint),
+      account: privateKeyToAccount(this.faucetKey, { nonceManager }),
+      chain: this.chain,
+    });
   }
 
   getBeneficiary(): string | null {

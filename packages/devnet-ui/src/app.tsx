@@ -18,6 +18,7 @@ import { Banner } from "./ui/Banner";
 import { InstanceRail } from "./ui/shell/InstanceRail";
 import { LiveChip } from "./ui/shell/LiveChip";
 import { NodeGate } from "./ui/shell/NodeGate";
+import { FaucetButton } from "./ui/shell/FaucetButton";
 import { SearchBox } from "./ui/shell/SearchBox";
 import { ActivityScreen } from "./ui/screens/ActivityScreen";
 import { PeersScreen } from "./ui/screens/PeersScreen";
@@ -55,7 +56,10 @@ function Header({ instance }: { instance: Instance }) {
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
           <SearchBox />
-          <LiveChip />
+          <div className="flex items-center gap-4">
+            {info.data?.faucetEnabled && <FaucetButton url={instance.url} />}
+            <LiveChip />
+          </div>
         </div>
       </div>
       <nav aria-label="Views" className="mt-6 flex gap-7 border-b border-line">

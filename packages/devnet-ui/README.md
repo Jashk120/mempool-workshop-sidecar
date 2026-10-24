@@ -8,6 +8,7 @@ A web explorer for Skandha EIP-8141 instances. Point it at one or more nodes sta
 - **Transaction**: the frames, the rule-by-rule admission report, what happened to the transaction,
   and which of your other instances have it and when they first saw it.
 - **Peers**: the node's p2p peers.
+- **Faucet**: a button, shown only when the node has a faucet (`SKANDHA_FAUCET_KEY`), that asks the node to send 1 ETH to an address.
 
 It is a static single-page app. It talks to each node directly over JSON-RPC and WebSocket
 (`skandha_explorer_*`, see [`docs/skandha_explorer.md`](../../docs/skandha_explorer.md)), so a node

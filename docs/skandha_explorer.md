@@ -650,6 +650,26 @@ unauthenticated, polling caller can repeat.
 
 ---
 
+### skandha_explorer_faucet
+
+The one explorer method that **changes chain state**: it sends 1 ETH from a dedicated faucet account
+to an address. It exists only when the node runs with `--explorer.enable` **and** the environment
+variable `SKANDHA_FAUCET_KEY` holds the faucet account's private key; `info.faucetEnabled` is `true`
+exactly then. Without the key the method fails with `-32601` like a disabled explorer.
+
+Use a key that is **not** published anywhere and fund it with only what you are willing to give
+away: the limits below slow a drain down, the balance bounds it. The key is read from the
+environment, not a flag, so it stays out of the process list.
+
+Params: `[address]`. Result: `{ txHash, amount }`, with `amount` in wei as a decimal string. The
+transaction is submitted, not mined.
+
+Limits (in memory, reset on restart): one request per address per hour, and 100 requests per hour
+in total. A refused request returns `-32600` with the reason in `message` (invalid address, already
+received funds, rate limited, faucet empty).
+
+---
+
 ## skandha_subscribe: explorerEvents
 
 The lifecycle event log is also available as a push stream, over the WebSocket RPC (`--api.ws`,
