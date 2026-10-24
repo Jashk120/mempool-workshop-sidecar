@@ -200,6 +200,11 @@ export class Network implements INetwork {
     await this.reqResp.start();
     this.reqResp.registerProtocols();
 
+    // Gossip must be running before the peer manager starts: discovery dials the boot nodes straight away, and a
+    // connection made before gossipsub registers its protocol handler cannot negotiate it, so the peer would never
+    // be a gossip peer (publishing then fails with NoPeersSubscribedToTopic).
+    await this.gossip.start();
+
     await this.peerManager.start();
     const discv5 = this.peerManager["discovery"]?.discv5;
     if (!discv5) {
@@ -220,8 +225,6 @@ export class Network implements INetwork {
         this.logger.warn("Failed to save ENR after metadata update", error);
       }
     }
-
-    await this.gossip.start();
 
     const multiaddresses = this.libp2p
       .getMultiaddrs()
