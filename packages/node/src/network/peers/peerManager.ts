@@ -131,7 +131,9 @@ export class PeerManager {
   }
 
   async start(): Promise<void> {
-    await this.discovery?.start();
+    // Listen before discovery starts: discovery dials the boot nodes, and a connection opened before the listener
+    // exists is never registered, so gossip would not reach that peer (the peer sees an inbound connection, this
+    // node sees none).
     this.libp2p.addEventListener(
       Libp2pEvent.peerConnect,
       this.onLibp2pPeerConnect as any
@@ -141,6 +143,8 @@ export class PeerManager {
       this.onLibp2pPeerDisconnect as any
     );
     this.networkEventBus.on(NetworkEvent.reqRespRequest, this.onRequest);
+    await this.discovery?.start();
+    this.registerUnknownConnections();
 
     // On start-up will connected to existing peers in libp2p.peerStore, same as autoDial behaviour
     this.heartbeat();
@@ -377,6 +381,7 @@ export class PeerManager {
    * NOTE: Discovery should only add a new query if one isn't already queued.
    */
   private heartbeat(): void {
+    this.registerUnknownConnections();
     const connectedPeers = this.getConnectedPeerIds();
 
     // Decay scores before reading them. Also prunes scores
@@ -493,6 +498,23 @@ export class PeerManager {
    * Registers a peer as connected. The `direction` parameter determines if the peer is being
    * dialed or connecting to us.
    */
+  /**
+   * Registers connections libp2p holds open that no "peer:connect" event was handled for. Safety net against a missed
+   * event (the connection exists, but the peer would never get gossip or be pinged).
+   */
+  private registerUnknownConnections(): void {
+    for (const connection of this.libp2p.getConnections()) {
+      if (
+        connection.status === "open" &&
+        !this.connectedPeers.has(connection.remotePeer.toString())
+      ) {
+        void this.onLibp2pPeerConnect(
+          new CustomEvent("peer:connect", { detail: connection })
+        );
+      }
+    }
+  }
+
   private onLibp2pPeerConnect = async (
     evt: CustomEvent<Connection>
   ): Promise<void> => {
