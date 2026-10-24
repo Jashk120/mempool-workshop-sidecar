@@ -470,6 +470,14 @@ upgrades them together. Check that they found each other afterwards: `skandha_ex
 node on **both** (an empty list on the gateway means frame transactions are admitted but never reach the miner).
 The gateway needs about 40 seconds to start on this VM.
 
+*History:* on 2026-10-24 frame transactions were admitted by the gateway but never mined, because the two nodes
+had no working p2p link. Two startup-order bugs caused it, both fixed in the sidecar: the peer manager started
+listening for connections only after discovery had already dialed the boot node, so the gateway never registered the
+miner as a peer (`d6a85ff`); and gossipsub started after the peer manager dialed, so the peers synced over
+request/response but could not gossip, and publishing failed with `NoPeersSubscribedToTopic` (`7e51741`). At the same
+time the gateway moved from a bare-metal bun build to this Docker image, and got the faucet. If `skandha_explorer_peers`
+is empty on either node, or the gateway logs `NoPeersSubscribedToTopic`, suspect this area first.
+
 `manual` bundling keeps the gateway from relaying anything itself: the miner is the only node that
 mines. The gateway still follows the chain: every 10 seconds it looks up the receipts of the
 transactions it holds, so a transaction it forwarded shows `OnChain` (or `Reverted`) there too once
