@@ -433,37 +433,42 @@ local ethrex and reconciles them to `OnChain`. The gateway has no chain of its o
 `config.json` is the miner's with `rpcEndpoint` and `rpcEndpointSubmit` set to the miner's ethrex on
 the internal network (`http://10.128.0.5:8545`; the default `default-allow-internal` rule allows it).
 
-**Not yet migrated to the miner's Docker setup** - still runs the original bare-metal bun build
-step 5 described before the miner moved to `ghcr.io/forshtat/mempool-workshop-sidecar:latest` (a 1 GB VM
-cannot run `bun install` and the build comfortably, so copy a built tree instead - from the miner
-if it still has one from before its own Docker migration, or build one anywhere and copy from
-there): `tar czf - --exclude=skandha/config.json --exclude=skandha/packages/devnet-ui
-skandha` over `gcloud compute ssh`, unpack in `~`; `unzip` and bun 1.4.2 must be installed first.
-Unit `/etc/systemd/system/skandha-gateway.service` (bare-metal bun, not Docker - the miner's
-*current* unit in step 5 above doesn't apply here):
+The gateway runs the **same Docker image as the miner** (`ghcr.io/forshtat/mempool-workshop-sidecar:latest`),
+so the two cannot run different rule sets. Docker has to be installed on it (`sudo apt-get install -y docker.io`);
+a 1 GB VM cannot build Skandha, but it runs the published image. Unit
+`/etc/systemd/system/skandha-gateway.service`:
 
 ```ini
 [Unit]
-Description=Skandha gateway node (EIP-8141 devnet)
-After=network.target
+Description=Skandha gateway node (EIP-8141 devnet, Docker)
+After=network.target docker.service
+Requires=docker.service
 
 [Service]
 Type=simple
-User=alexf
-WorkingDirectory=/home/alexf/skandha
-EnvironmentFile=/etc/skandha-gateway.env
-ExecStart=/home/alexf/.bun/bin/bun --bun /home/alexf/skandha/packages/cli/bin/skandha.js node \
-  --configFile /home/alexf/skandha/config.json --dataDir /home/alexf/skandha-data \
+ExecStartPre=-/usr/bin/docker rm -f skandha-gateway
+ExecStartPre=/usr/bin/docker pull ghcr.io/forshtat/mempool-workshop-sidecar:latest
+ExecStart=/usr/bin/docker run --rm --name skandha-gateway --network host --env-file /etc/skandha-gateway.env \
+  -v /home/alexf/skandha/config.json:/usr/app/config.json:ro \
+  -v /home/alexf/skandha-data:/usr/app/data \
+  ghcr.io/forshtat/mempool-workshop-sidecar:latest node \
+  --configFile /usr/app/config.json --dataDir /usr/app/data \
   --api.address 0.0.0.0 --api.port 14337 --api.wsPort 14337 \
   --p2p.host 0.0.0.0 --p2p.enrHost 34.132.84.247 --p2p.port 4337 --p2p.enrPort 4337 \
   --p2p.retainPeerId --p2p.bootEnrs <the miner's ENR> \
   --executor.bundlingMode manual --redirectRpc --explorer.enable
+ExecStop=/usr/bin/docker stop -t 10 skandha-gateway
 Restart=on-failure
 RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 ```
+
+Both nodes pull `:latest` when their unit starts, so `sudo systemctl restart skandha-miner skandha-gateway`
+upgrades them together. Check that they found each other afterwards: `skandha_explorer_peers` must list the other
+node on **both** (an empty list on the gateway means frame transactions are admitted but never reach the miner).
+The gateway needs about 40 seconds to start on this VM.
 
 `manual` bundling keeps the gateway from relaying anything itself: the miner is the only node that
 mines. The gateway still follows the chain: every 10 seconds it looks up the receipts of the
