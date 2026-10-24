@@ -326,7 +326,7 @@ Everything runs on one VM, `eip8141-miner`, in GCP project `hegota-mempool-devne
 |---|---|---|
 | **ethrex** | Docker, image `ghcr.io/forshtat/ethrex:eip8141-tracer-latest` | Fork of ethrex with EIP-8141 frame transactions, a native ERC-7562 frame tracer and two `ethrex_*` RPC methods. Sync mode `full`. Branch `eip8141-tracer` of `forshtat/ethrex`. |
 | **Lighthouse** | Docker, `ethpandaops/lighthouse:focil` | Two beacon nodes plus one validator client with 32 validators. Two beacon nodes because a solo Lighthouse can never leave `SyncState::Stalled` (needs a synced peer) and so never builds a first block; the second, validator-less node satisfies the peer requirement. |
-| **Skandha** | systemd unit `skandha-miner`, `bun … skandha.js node` | Fork of Skandha that handles EIP-8141 frame transactions instead of ERC-4337 UserOperations. `--executor.bundlingMode auto`, `--redirectRpc`, RPC and WS on `:14337`, libp2p on `:4337`. Branch `8141` of `forshtat/framepool`. |
+| **Skandha** | systemd unit `skandha-miner`, `bun … skandha.js node` | Fork of Skandha that handles EIP-8141 frame transactions instead of ERC-4337 UserOperations. `--executor.bundlingMode auto`, `--redirectRpc`, RPC and WS on `:14337`, libp2p on `:4337`. Branch `master` of `forshtat/mempool-workshop-sidecar`. |
 | **Caddy** | systemd | TLS termination and the path-based routing shown above. |
 | **Genesis** | one-shot containers `ethpandaops/ethereum-genesis-generator:6.1.6` and `eth2-val-tools` | Genesis files and validator keystores generated once at first bring-up. |
 
@@ -496,7 +496,7 @@ enabled too, and so are `txpool_*` and `admin_*`.
 You can run your own frame-tx-aware Skandha node and peer it with this devnet's mempool.
 
 ```sh
-git clone https://github.com/forshtat/framepool && cd framepool && git checkout 8141
+git clone https://github.com/forshtat/mempool-workshop-sidecar && cd mempool-workshop-sidecar
 bun install && bun run build
 ```
 

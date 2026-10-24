@@ -4,7 +4,6 @@ on:
   pull_request:
     branches:
       - master
-      - develop
 
 # EndBug/version-check reads package.json at both the PR head and base via
 # the API; the repo's default GITHUB_TOKEN scope (Settings > Actions >

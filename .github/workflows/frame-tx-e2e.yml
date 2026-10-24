@@ -45,7 +45,7 @@ jobs:
       # Only needed if ghcr.io/forshtat/eip8141-devnet is kept private.
       # Simplest fix: mark that package (and ghcr.io/forshtat/ethrex) public
       # in GHCR once, and delete this step - GITHUB_TOKEN's cross-repo
-      # package read access (forshtat/framepool workflow pulling a package
+      # package read access (forshtat/mempool-workshop-sidecar workflow pulling a package
       # published by forshtat/ethrex) is not guaranteed for private packages.
       - name: Log in to ghcr.io
         uses: docker/login-action@v4

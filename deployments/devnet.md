@@ -14,7 +14,7 @@ deployment transaction(s) from Etherscan and replays them onto the devnet from a
 deployer key, rewriting any mainnet contract addresses it references to their devnet
 counterparts. A fresh chain plus a fixed deployment order gives every contract the same address
 every time. Design: [2026-09-21-devnet-predeploy-design.md](../docs/superpowers/specs/2026-09-21-devnet-predeploy-design.md).
-Build: [PR #2](https://github.com/forshtat/framepool/pull/2).
+Build: PR #2 in the former `forshtat/framepool` repository (this repository starts from a squashed history, so the PR is not carried over).
 
 ## Canonical addresses
 

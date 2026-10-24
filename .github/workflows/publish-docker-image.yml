@@ -8,7 +8,7 @@ name: Publish Docker image
 on:
   push:
     branches:
-      - develop
+      - master
   workflow_dispatch: {}
 
 permissions:
@@ -43,8 +43,8 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          # :develop-latest is what a devnet VM pulls; the sha tag pins a
-          # specific build.
+          # :latest is what a devnet VM pulls; the sha tag pins a specific
+          # build.
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:develop-latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:develop-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}

@@ -206,13 +206,13 @@ Log out and back in (or reconnect) so the `docker` group applies.
 
 ### 4. The chain: ethrex + Lighthouse
 
-Get the repo onto the VM. The branch is `8141` of `forshtat/framepool`; cloning it gives you both
+Get the repo onto the VM. The branch is `master` of `forshtat/mempool-workshop-sidecar`; cloning it gives you both
 the Compose files and the Skandha source used in step 5.
 
 ```sh
 gcloud compute ssh $VM --project=$PROJECT --zone=$ZONE
 # --- on the VM from here ---
-git clone --depth 1 --branch 8141 https://github.com/forshtat/framepool.git ~/skandha
+git clone --depth 1 --branch master https://github.com/forshtat/mempool-workshop-sidecar.git ~/skandha
 cp -r ~/skandha/deploy/devnet ~/devnet && cd ~/devnet
 ```
 
@@ -263,9 +263,11 @@ transactions are only valid after that.
 
 ### 5. Skandha
 
-The miner runs Skandha from the Docker image CI publishes on every push to `develop`
-(`ghcr.io/forshtat/framepool:develop-latest`; see `.github/workflows/` for the "Publish Docker
-image" job), not from a local build — only `config.json` is bind-mounted from the host:
+The miner runs Skandha from the Docker image CI publishes on every push to `master`
+(`ghcr.io/forshtat/mempool-workshop-sidecar:latest`; see `.github/workflows/` for the "Publish Docker
+image" job), not from a local build — only `config.json` is bind-mounted from the host. GHCR
+creates the package private on its first publish: make it public once (GitHub > Packages >
+mempool-workshop-sidecar > Package settings), or the VM's `docker pull` fails without a login.
 
 ```sh
 # --- on the VM ---
@@ -311,11 +313,11 @@ Requires=docker.service
 [Service]
 Type=simple
 ExecStartPre=-/usr/bin/docker rm -f skandha-miner
-ExecStartPre=/usr/bin/docker pull ghcr.io/forshtat/framepool:develop-latest
+ExecStartPre=/usr/bin/docker pull ghcr.io/forshtat/mempool-workshop-sidecar:latest
 ExecStart=/usr/bin/docker run --rm --name skandha-miner --network host \
   -v /home/alexf/skandha/config.json:/usr/app/config.json:ro \
   -v /home/alexf/skandha-data:/usr/app/data \
-  ghcr.io/forshtat/framepool:develop-latest node \
+  ghcr.io/forshtat/mempool-workshop-sidecar:latest node \
   --configFile /usr/app/config.json --dataDir /usr/app/data \
   --api.address 0.0.0.0 --api.port 14337 --api.wsPort 14337 \
   --p2p.host 0.0.0.0 --p2p.enrHost 34.67.41.151 --p2p.port 4337 --p2p.enrPort 4337 \
@@ -405,9 +407,9 @@ about 10 seconds.
   obvious hardening.
 - **Redoing genesis:** see above ("To redo genesis"). Afterwards re-fetch the beacon ENR
   (step 4), restart `skandha-miner`, and expect Skandha's mempool to be empty.
-- **Updating Skandha:** the miner runs `ghcr.io/forshtat/framepool:develop-latest`, which CI
-  rebuilds and pushes on every push to `develop` (the "Publish Docker image" workflow;
-  `gh run list --repo forshtat/framepool --branch develop` to check it landed - it normally takes
+- **Updating Skandha:** the miner runs `ghcr.io/forshtat/mempool-workshop-sidecar:latest`, which CI
+  rebuilds and pushes on every push to `master` (the "Publish Docker image" workflow;
+  `gh run list --repo forshtat/mempool-workshop-sidecar --branch master` to check it landed - it normally takes
   a couple of minutes after the merge). Updating is then just
   `sudo systemctl restart skandha-miner`, whose `ExecStartPre` does the `docker pull` before
   restarting the container. The public RPC is down for the few seconds between stop and start.
@@ -432,7 +434,7 @@ local ethrex and reconciles them to `OnChain`. The gateway has no chain of its o
 the internal network (`http://10.128.0.5:8545`; the default `default-allow-internal` rule allows it).
 
 **Not yet migrated to the miner's Docker setup** - still runs the original bare-metal bun build
-step 5 described before the miner moved to `ghcr.io/forshtat/framepool:develop-latest` (a 1 GB VM
+step 5 described before the miner moved to `ghcr.io/forshtat/mempool-workshop-sidecar:latest` (a 1 GB VM
 cannot run `bun install` and the build comfortably, so copy a built tree instead - from the miner
 if it still has one from before its own Docker migration, or build one anywhere and copy from
 there): `tar czf - --exclude=skandha/config.json --exclude=skandha/packages/devnet-ui
