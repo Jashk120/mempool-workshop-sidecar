@@ -804,7 +804,7 @@ describe("FrameTxValidationService checks[] (transaction-level rules)", () => {
     // ethrex's canonicalMempoolValid/canonicalMempoolViolation report its own
     // canonical-mempool-policy opinion, decoupled from whether it reports
     // execution results - a `false` canonicalMempoolValid does not gate
-    // Skandha's own ERC-7562 admission checks, which run against the trace
+    // the sidecar's own ERC-7562 admission checks, which run against the trace
     // regardless (and here find nothing to object to, so the tx validates).
     const collector = new CheckCollector();
     const root = ethrexFrame({ from: ENTRY_POINT, to: SENDER });
@@ -1143,7 +1143,7 @@ describe("FrameTxValidationService: naming a banned opcode ethrex itself caught"
   it("replaces ethrex's raw opcode byte with its mnemonic and hex value", async () => {
     // 58 decimal = 0x3a = GASPRICE - the exact case a real GASPRICE call in a
     // validation frame produces (ethrex's own trace-rule violation fires
-    // before Skandha's own OP-011 check ever runs).
+    // before the sidecar's own OP-011 check ever runs).
     const err = await service()
       .validate(tx(), violationResult("BannedOpcode(58)"))
       .catch((e) => e);

@@ -28,7 +28,7 @@ function summarizeIssues(error: z.ZodError): string {
 }
 
 /**
- * One JSON-RPC call over HTTP. The Skandha API answers a failed call with HTTP
+ * One JSON-RPC call over HTTP. The sidecar API answers a failed call with HTTP
  * 200 and `{ error: { message, data, code } }`, and an unexpected crash with a
  * 5xx and `{ error: "<string>" }`; both are handled here.
  */

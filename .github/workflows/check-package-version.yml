@@ -51,7 +51,7 @@ jobs:
         if: steps.check.outputs.changed == 'true'
         run: echo "Version change found - $(jq -r .version package.json)"
 
-      - name: Dry run Skandha build
+      - name: Dry run the sidecar build
         run: bun install && bun run build && bun run bootstrap
 
       - name: Log when unchanged

@@ -2,7 +2,7 @@
 
 A public, demonstration-only Ethereum devnet for trying out **EIP-8141 frame transactions** and an
 **alternative (frame-tx) mempool**. It runs an ethrex fork (execution) with Lighthouse (consensus),
-plus a Skandha fork that acts as the frame-transaction mempool and relay.
+plus a sidecar fork that acts as the frame-transaction mempool and relay.
 
 > **This is a throwaway network.** It has no security model, a small faucet, no persistence guarantee,
 > and may be reset or redeployed at any time. Do not send anything of value to it. Several admin
@@ -12,7 +12,7 @@ plus a Skandha fork that acts as the frame-transaction mempool and relay.
 - [2. Sending your first transactions](#2-sending-your-first-transactions)
 - [3. Frame transaction cheat sheet](#3-frame-transaction-cheat-sheet)
 - [4. How the devnet is built](#4-how-the-devnet-is-built)
-- [5. Non-standard APIs: Skandha](#5-non-standard-apis-skandha)
+- [5. Non-standard APIs: sidecar](#5-non-standard-apis-sidecar)
 - [6. Non-standard APIs: ethrex fork](#6-non-standard-apis-ethrex-fork)
 - [7. Running your own node against it](#7-running-your-own-node-against-it)
 - [8. Predeployed contracts](#8-predeployed-contracts)
@@ -25,8 +25,8 @@ plus a Skandha fork that acts as the frame-transaction mempool and relay.
 | | |
 |---|---|
 | **RPC (ethrex)** | `https://altmempool.forshtat.com` |
-| **Frame-tx mempool / bundler RPC (Skandha)** | `https://altmempool.forshtat.com/rpc` |
-| **Skandha WebSocket** | `wss://altmempool.forshtat.com/rpc` |
+| **Frame-tx mempool / bundler RPC (the sidecar)** | `https://altmempool.forshtat.com/rpc` |
+| **Sidecar WebSocket** | `wss://altmempool.forshtat.com/rpc` |
 | **Chain ID** | `1337` (`0x539`) |
 | **Block time** | 6 seconds (`SLOT_DURATION_MS=6000`) |
 | **Currency** | ETH (devnet, worthless) |
@@ -40,11 +40,11 @@ Which URL should I use?
 - **Root URL (`/`)** talks to ethrex directly. Use it for everything standard (`eth_*`, `net_*`,
   `web3_*`, `txpool_*`), for legacy/1559 transactions, and for the `ethrex_*` and `debug_*`
   methods in [section 6](#6-non-standard-apis-ethrex-fork).
-- **`/rpc`** talks to Skandha. Use it to submit frame transactions into the alt mempool and to
-  follow them ([section 5](#5-non-standard-apis-skandha)). Skandha also proxies a whitelist of
+- **`/rpc`** talks to the sidecar. Use it to submit frame transactions into the alt mempool and to
+  follow them ([section 5](#5-non-standard-apis-sidecar)). The sidecar also proxies a whitelist of
   standard read methods to ethrex (`eth_blockNumber`, `eth_getBalance`, `eth_call`,
   `eth_getTransactionCount`, `eth_sendRawTransaction`, and so on), but not the whole API - for
-  anything unusual, use the root URL. Skandha answers `-32601` for `eth_syncing` and
+  anything unusual, use the root URL. The sidecar answers `-32601` for `eth_syncing` and
   `eth_supportedEntryPoints`.
 
 Quick check:
@@ -60,7 +60,7 @@ curl -s -X POST https://altmempool.forshtat.com \
 
 Ask the faucet: press **Faucet** in the explorer, or call `skandha_explorer_faucet` with your
 address (1 ETH, once per hour per address; see
-[`docs/skandha_explorer.md`](../../docs/skandha_explorer.md#skandha_explorer_faucet)):
+[`docs/sidecar_explorer.md`](../../docs/sidecar_explorer.md#skandha_explorer_faucet)):
 
 ```sh
 curl -s https://altmempoolgateway.forshtat.com/rpc -H 'content-type: application/json' \
@@ -157,7 +157,7 @@ paymaster contract has to be deployed with an ordinary transaction first.
 
 ### 2.2 A frame transaction
 
-Submit the JSON form of the transaction to Skandha with `eth_sendFrameTransaction`:
+Submit the JSON form of the transaction to the sidecar with `eth_sendFrameTransaction`:
 
 ```sh
 curl -si -X POST https://altmempool.forshtat.com/rpc \
@@ -208,7 +208,7 @@ repo: `buildUnsignedFrameTx`, `signFrameTx` and `toWire` in `test/e2e/helpers.ts
 The response is the transaction hash. Follow it:
 
 ```sh
-# Skandha's view: Submitted -> OnChain (typically ~10 s)
+# Sidecar view: Submitted -> OnChain (typically ~10 s)
 curl -s -X POST https://altmempool.forshtat.com/rpc -H 'content-type: application/json' \
   --data '{"jsonrpc":"2.0","id":1,"method":"skandha_frameTransactionStatus","params":["0x<hash>"]}'
 
@@ -313,11 +313,11 @@ Gotchas (each cost a CI round to find):
    |              |  /rpc*  -> localhost:14337                                                 |
    |              |  else   -> localhost:8545                                                  |
    |              v                          v                                                 |
-   |   Skandha (systemd, bun)  ------>  ethrex (docker)  <--Engine API :8551-->  Lighthouse   |
+   |   The sidecar (systemd, bun)  ------>  ethrex (docker)  <--Engine API :8551-->  Lighthouse   |
    |   node mode, auto bundling   JSON-RPC :8545                 beacon-1 + beacon-2 + VC      |
    |   :14337 RPC/WS, :4337 p2p                                                                |
    +------------------------------------------------------------------------------------------+
-        ^ :4337 tcp/udp (Skandha p2p, open)              ^ :8545 (ethrex RPC, also open directly)
+        ^ :4337 tcp/udp (sidecar p2p, open)              ^ :8545 (ethrex RPC, also open directly)
 ```
 
 Everything runs on one VM, `eip8141-miner`, in GCP project `hegota-mempool-devnet`.
@@ -326,12 +326,12 @@ Everything runs on one VM, `eip8141-miner`, in GCP project `hegota-mempool-devne
 |---|---|---|
 | **ethrex** | Docker, image `ghcr.io/forshtat/ethrex:eip8141-tracer-latest` | Fork of ethrex with EIP-8141 frame transactions, a native ERC-7562 frame tracer and two `ethrex_*` RPC methods. Sync mode `full`. Branch `eip8141-tracer` of `forshtat/ethrex`. |
 | **Lighthouse** | Docker, `ethpandaops/lighthouse:focil` | Two beacon nodes plus one validator client with 32 validators. Two beacon nodes because a solo Lighthouse can never leave `SyncState::Stalled` (needs a synced peer) and so never builds a first block; the second, validator-less node satisfies the peer requirement. |
-| **Skandha** | systemd unit `skandha-miner`, `bun … skandha.js node` | Fork of Skandha that handles EIP-8141 frame transactions instead of ERC-4337 UserOperations. `--executor.bundlingMode auto`, `--redirectRpc`, RPC and WS on `:14337`, libp2p on `:4337`. Branch `master` of `forshtat/mempool-workshop-sidecar`. |
+| **Sidecar** | systemd unit `skandha-miner`, `bun … skandha.js node` | Heavily modified fork of an ERC-4337 bundler that handles EIP-8141 frame transactions instead of ERC-4337 UserOperations. `--executor.bundlingMode auto`, `--redirectRpc`, RPC and WS on `:14337`, libp2p on `:4337`. Branch `master` of `forshtat/mempool-workshop-sidecar`. |
 | **Caddy** | systemd | TLS termination and the path-based routing shown above. |
 | **Genesis** | one-shot containers `ethpandaops/ethereum-genesis-generator:6.1.6` and `eth2-val-tools` | Genesis files and validator keystores generated once at first bring-up. |
 
 Files: `deploy/devnet/docker-compose.yml`, `genesis.values.env` and the operator runbook in
-`deploy/devnet/README.md`. A second VM, `eip8141-gateway` (e2-micro), runs a gateway Skandha node
+`deploy/devnet/README.md`. A second VM, `eip8141-gateway` (e2-micro), runs a gateway sidecar node
 that accepts frame transactions and gossips them over p2p to the miner (see "Gateway node" there).
 
 ### 4.2 Fork schedule
@@ -349,12 +349,12 @@ are deployed at genesis (needed for an Amsterdam chain to keep producing blocks)
 
 ### 4.3 Life of a frame transaction
 
-1. A client calls `eth_sendFrameTransaction` on Skandha (`/rpc`).
-2. Skandha makes one `ethrex_simulateFrameTransaction` call with `{"trace": true}`
+1. A client calls `eth_sendFrameTransaction` on the sidecar (`/rpc`).
+2. The sidecar makes one `ethrex_simulateFrameTransaction` call with `{"trace": true}`
    ([6.1](#61-ethrex_simulateframetransaction)), recognises the validation-prefix shape from the
    frames, and enforces the ERC-7562-derived rules (opcodes, storage access, per-role staking and
    reputation) against the returned trace. Failures are rejected with a JSON-RPC error.
-3. The transaction enters Skandha's mempool (status `Pending`) and is gossiped to Skandha peers
+3. The transaction enters the sidecar's mempool (status `Pending`) and is gossiped to sidecar peers
    over libp2p (gossipsub topic per mempool, discv5 discovery).
 4. In `auto` mode, `BundlingService` runs every 10 s and hands each ready transaction to the
    `PrivilegedRelayer`, which calls **`ethrex_submitPrivilegedFrameTransaction`** on the local
@@ -365,7 +365,7 @@ are deployed at genesis (needed for an Amsterdam chain to keep producing blocks)
 
 Consequence worth knowing: ethrex's own mempool is not the alt mempool. A frame transaction can
 also be sent to ethrex directly with `eth_sendRawTransaction` (type `0x06`), where ethrex applies
-its own validation, but the point of this devnet is the Skandha path.
+its own validation, but the point of this devnet is the sidecar path.
 
 ### 4.4 Ports and firewall (GCP)
 
@@ -373,13 +373,13 @@ its own validation, but the point of this devnet is the Skandha path.
 |---|---|---|
 | 80, 443/tcp | world | Caddy (`eip8141-miner-web`) |
 | 8545/tcp | world | ethrex RPC, direct and unencrypted (`eip8141-miner-rpc`) |
-| 4337/tcp+udp | world | Skandha libp2p (`eip8141-miner-p2p`) |
-| 14337/tcp | nobody directly | Skandha RPC/WS, reachable only via Caddy `/rpc` |
+| 4337/tcp+udp | world | sidecar libp2p (`eip8141-miner-p2p`) |
+| 14337/tcp | nobody directly | sidecar RPC/WS, reachable only via Caddy `/rpc` |
 | 22/tcp | world | SSH (GCP default rule) |
 
 ---
 
-## 5. Non-standard APIs: Skandha
+## 5. Non-standard APIs: sidecar
 
 All on `https://altmempool.forshtat.com/rpc` (HTTP `POST`; WebSocket at the same path). The
 ERC-4337 UserOperation methods (`eth_sendUserOperation`, `eth_estimateUserOperationGas`,
@@ -396,16 +396,16 @@ ERC-4337 UserOperation methods (`eth_sendUserOperation`, `eth_estimateUserOperat
 | `eth_getFrameTransactionReceipt` | `[hash]` | `{ status: "success"\|"reverted", payer, cumulativeGasUsed, frameReceipts: [{status, gasUsed: {execution, state}, logs}] }`. Errors if the transaction is not yet mined or is not a frame transaction. |
 | `skandha_frameTransactionStatus` | `[hash]` | `{ tx, sender, payer, factory?, status, transaction?, reason? }`. `status` is one of `New`, `Pending`, `Submitted`, `OnChain`, `Finalized`, `Cancelled`, `Reverted`. `transaction` appears once submitted; `reason` only for `Reverted`; `factory` only if the prefix has a deploy-role frame. Errors with "Frame transaction not found" for unknown hashes. |
 
-More detail: `docs/skandha_frameTransactionStatus.md`.
+More detail: `docs/sidecar_frameTransactionStatus.md`.
 
-### Other Skandha methods
+### Other sidecar methods
 
 | Method | Result |
 |---|---|
 | `skandha_getGasPrice` | `{ maxPriorityFeePerGas, maxFeePerGas }` suggested for this chain |
 | `skandha_config` | Node configuration: chain id, flags (`redirectRpc`, `testingMode`), the fixed entry-point sentinel `0x00000000000000000000000000000000000000aa`, relayer address, reputation/staking parameters, gas markup settings. Returned as-is, not hexlified. |
-| `skandha_connectedPeers` | List of connected Skandha p2p peers (empty if none) |
-| `skandha_subscribe` / `skandha_unsubscribe` | WebSocket push subscriptions. Event types: `pendingUserOps`, `submittedUserOps`, `onChainUserOps` (names kept from the original 4337 implementation; payload is now `{ tx, txHash, sender, payer, factory? }`). See `docs/skandha_subscribe.md`. |
+| `skandha_connectedPeers` | List of connected sidecar p2p peers (empty if none) |
+| `skandha_subscribe` / `skandha_unsubscribe` | WebSocket push subscriptions. Event types: `pendingUserOps`, `submittedUserOps`, `onChainUserOps` (names kept from the original 4337 implementation; payload is now `{ tx, txHash, sender, payer, factory? }`). See `docs/sidecar_subscribe.md`. |
 
 Also worth knowing: `eth_chainId` and `web3_clientVersion` (`skandha/v4.1.1-`) are answered
 locally; the rest of the standard read surface is proxied to ethrex (`--redirectRpc`).
@@ -414,7 +414,7 @@ locally; the rest of the standard read surface is proxied to ethrex (`--redirect
 
 `debug_bundler_dumpMempool`, `dumpMempoolRaw`, `clearState`, `clearMempool`, `clearReputation`,
 `setReputation`, `dumpReputation`, `setBundlingMode`, `setBundleInterval`, `sendBundleNow`,
-`setMempool`, `getStakeStatus`. In stock Skandha these are restricted to requests from localhost.
+`setMempool`, `getStakeStatus`. In the upstream bundler these are restricted to requests from localhost.
 **On this devnet they are reachable from the internet**, because Caddy connects from localhost.
 `debug_bundler_dumpMempool` is a handy way to see what is currently pending. Please do not call
 the `clear*` or `set*` methods unless you mean to affect everyone using the devnet. See
@@ -462,7 +462,7 @@ Result (camelCase):
 Params: `[rawTx]` (RLP-encoded type-`0x06`, hex). Forces the transaction into the **very next**
 payload build, bypassing ethrex's mempool admission entirely: no fee-competitiveness check, no
 paymaster reservation accounting, no expiry check, no spam protection. There is no retry - if the
-next payload build does not pick it up, it is dropped. This is the method Skandha's
+next payload build does not pick it up, it is dropped. This is the method the sidecar's
 `PrivilegedRelayer` uses. It is **fully unauthenticated**, and on this devnet the port is public,
 so anyone can call it. It is a demo shortcut, not something to copy into a real deployment.
 
@@ -482,7 +482,7 @@ diverging from geth's per-opcode default), `prestateTracer` and `opcodeTracer`, 
 is an *array*, one entry per frame-transaction frame (opcode counts, accessed slots, `EXTCODE*`
 accesses, contract sizes, Keccak preimages). The name is deliberately not `erc7562Tracer`: geth
 uses that for a differently shaped, single-call-tree tracer, and reusing the name would silently
-break clients that point at both. Skandha does not call `debug_traceCall` for admission; it gets
+break clients that point at both. The sidecar does not call `debug_traceCall` for admission; it gets
 the same trace data from a single `ethrex_simulateFrameTransaction` call with `{"trace": true}`
 ([6.1](#61-ethrex_simulateframetransaction)).
 
@@ -493,7 +493,7 @@ enabled too, and so are `txpool_*` and `admin_*`.
 
 ## 7. Running your own node against it
 
-You can run your own frame-tx-aware Skandha node and peer it with this devnet's mempool.
+You can run your own frame-tx-aware sidecar node and peer it with this devnet's mempool.
 
 ```sh
 git clone https://github.com/forshtat/mempool-workshop-sidecar && cd mempool-workshop-sidecar
@@ -590,7 +590,7 @@ about 60 frame transactions of every kind to both nodes.
   - `ethrex_submitPrivilegedFrameTransaction` has no authentication.
   - ethrex's full `debug_*` namespace is public, including state-mutating methods such as
     `debug_setHead`.
-  - Skandha's `debug_bundler_*` methods bypass the localhost-only gate because they arrive via
+  - the sidecar's `debug_bundler_*` methods bypass the localhost-only gate because they arrive via
     the reverse proxy.
   - `http://34.67.41.151:8545` exposes ethrex over plain HTTP alongside the HTTPS URL.
 - **One transaction in flight per sender.** A node accepts only a sender's current on-chain nonce
@@ -603,18 +603,18 @@ about 60 frame transactions of every kind to both nodes.
 - **Validation frames are read-only.** A frame in the validation prefix that writes state or sends
   value reverts in the VM ("validation prefix frame reverted"), so the OP-061 rule (no value in
   nested calls) is rarely what rejects such a transaction. ethrex gives the same message for no
-  funds, out of gas, a loop and a revert; Skandha adds the payer's balance or the frame gas limits
+  funds, out of gas, a loop and a revert; the sidecar adds the payer's balance or the frame gas limits
   when it can (see [`docs/ethrex-requests.md`](../../docs/ethrex-requests.md)).
 - **Faucet is small and in memory**: per-address and global limits reset on restart (see [Getting funds](#getting-funds)).
 - **Gas for new accounts** is ~204,600, not 21,000 ([2.1](#21-a-plain-transfer-mind-the-gas)).
-- **Privileged submission is one-shot.** If a transaction misses the next payload build, Skandha
+- **Privileged submission is one-shot.** If a transaction misses the next payload build, the sidecar
   re-submits it on its next 10-second pass, up to three attempts (`maxSubmitAttempts`), then cancels
   it with the reason "relayed N times without being included in a block"; expect an occasional
   extra block of latency. Sending it again after a cancellation is allowed.
 - **No frame-transaction lookup after pruning.** `eth_getFrameTransactionByHash` returns `null`
-  once the entry has left Skandha's mempool; use ethrex's `eth_getTransactionReceipt` or Skandha's
+  once the entry has left the sidecar's mempool; use ethrex's `eth_getTransactionReceipt` or the sidecar's
   `eth_getFrameTransactionReceipt` for mined transactions.
-- **Two Skandha nodes.** The miner is at `https://altmempool.forshtat.com/rpc`; the gateway at
+- **Two sidecar nodes.** The miner is at `https://altmempool.forshtat.com/rpc`; the gateway at
   `https://altmempoolgateway.forshtat.com/rpc` (WebSocket at `wss://…/rpc`) gossips to it. You can also run your own
   ([section 7](#7-running-your-own-node-against-it)).
 - **Not resilient to reboots (yet).** The chain's Docker containers do not have a restart policy,

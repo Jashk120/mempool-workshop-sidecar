@@ -11,7 +11,7 @@ export interface RuleInfo {
   explain: string;
 }
 
-/** Plain-language names for the rule ids the node reports (see docs/skandha_explorer.md). */
+/** Plain-language names for the rule ids the node reports (see docs/sidecar_explorer.md). */
 const RULE_INFO: Record<string, RuleInfo> = {
   "gas-limit": {
     label: "Gas limit",

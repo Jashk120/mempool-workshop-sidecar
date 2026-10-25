@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deploy a real, naive implementation of ERC-8421's `IStakingRegistry` to the persistent
-devnet, and wire Skandha to point `StakingRegistryService` at it instead of a hardcoded
+devnet, and wire the sidecar to point `StakingRegistryService` at it instead of a hardcoded
 `AddressZero` placeholder.
 
 **Architecture:** A minimal Solidity contract (already compiled) implementing
@@ -212,7 +212,7 @@ pragma solidity ^0.8.20;
 /// no slashing (the spec itself has none: "there are no penalization
 /// mechanisms in the alternative mempools protocol and the stake is never
 /// slashed"), no admin, purely per-caller stake bookkeeping. Deployed once
-/// to the Skandha devnet so StakingRegistryService/FrameTxValidationService's
+/// to the sidecar devnet so StakingRegistryService/FrameTxValidationService's
 /// stake-gated code paths can be exercised against a real on-chain stake
 /// instead of the AddressZero placeholder's always-zero short-circuit.
 contract NaiveStakingRegistry {

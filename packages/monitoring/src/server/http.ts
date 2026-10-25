@@ -24,7 +24,7 @@ export async function getHttpMetricsServer(
 
   const scrapeTimeMetric = new Histogram<"status">({
     name: "Skandha_metrics_scrape_seconds",
-    help: "Skandha metrics server async time to scrape metrics",
+    help: "Sidecar metrics server async time to scrape metrics",
     labelNames: ["status"],
     buckets: [0.1, 1, 10],
   });

@@ -2,7 +2,7 @@
   "name": "@skandha/devnet-ui",
   "private": true,
   "version": "0.1.0",
-  "description": "Explorer for Skandha EIP-8141 instances (mempool, admission reports, lifecycle)",
+  "description": "Explorer for the sidecar EIP-8141 instances (mempool, admission reports, lifecycle)",
   "type": "module",
   "scripts": {
     "dev": "vite",

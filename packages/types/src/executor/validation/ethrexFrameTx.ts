@@ -128,7 +128,7 @@ export interface EthrexSimulateFrameTransactionResult {
    * NOT imply `gasUsed`/`frames`/`erc7562Trace` are absent, so a consumer
    * must not treat this field as a fail-closed gate on its own; the real
    * "no data" signal is `erc7562Trace == null` (or `gasUsed`/`frames ==
-   * null`). Skandha runs its own ERC-7562/pre_verify-aware validation
+   * null`). The sidecar runs its own ERC-7562/pre_verify-aware validation
    * against the trace regardless of this field's value.
    */
   canonicalMempoolValid: boolean;

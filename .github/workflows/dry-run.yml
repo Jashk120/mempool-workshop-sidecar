@@ -1,4 +1,4 @@
-name: Skandha Dry Run Build
+name: The sidecar Dry Run Build
 
 on:
   pull_request:

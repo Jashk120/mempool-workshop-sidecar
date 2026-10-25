@@ -4,10 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Skandha is a modular, TypeScript bundler/relayer sidecar for **EIP-8141 frame transactions** — a
+The sidecar is a modular, TypeScript bundler/relayer sidecar for **EIP-8141 frame transactions** — a
 proposed native Ethereum transaction type (`FRAME_TX_TYPE = 0x06`) that replaces ERC-4337's
 contract-level `UserOperation`/`EntryPoint` model with protocol-native validation and execution.
-This repo is a fork of Skandha's original ERC-4337 bundler onto that EIP; it no longer implements
+This repo is a fork of sidecar's original ERC-4337 bundler onto that EIP; it no longer implements
 ERC-4337 (no `EntryPoint` contract calls, no `eth_sendUserOperation`) — see `README.md` and
 `P2P.md` for the full picture, including why it needs an EIP-8141-aware execution client
 ([ethrex](https://github.com/lambdaclass/ethrex)'s `eip8141-tracer` branch; plain geth has no
@@ -116,7 +116,7 @@ EIP-2930 selection.) Full config schema and defaults are documented in `README.m
 - **`cli`** — the `skandha` executable entrypoint; parses CLI args/config and wires up either the
   standalone (`api` + `executor`, no P2P) or node (`node` + P2P) mode.
 - **`devnet-ui`** — a static React app (Vite, Tailwind, TanStack Query/Router) that explores one or
-  more Skandha instances through `skandha_explorer_*`: pool, activity, per-rule admission reports,
+  more sidecar instances through `skandha_explorer_*`: pool, activity, per-rule admission reports,
   peers. Not part of the `build` chain: it has its own `dev`/`test`/`build`/`test:e2e` scripts and its
   own toolchain versions (see its README). `bun run mock` there starts fake nodes for development.
 
@@ -183,7 +183,7 @@ Key services (`packages/executor/src/services/*`):
 - **`ExplorerService`** (`services/ExplorerService/`) — in-memory admission reports (`AdmissionRecord`,
   built via `CheckCollector` while `FrameTxValidationService` runs) and a bounded lifecycle event log.
   Created only with `--explorer.enable`; served read-only through `skandha_explorer_*`
-  (`modules/explorer.ts`) and the `explorerEvents` stream. See `docs/skandha_explorer.md`.
+  (`modules/explorer.ts`) and the `explorerEvents` stream. See `docs/sidecar_explorer.md`.
 - **`ExecutorEventBus`** / **`SubscriptionService`** (`services/SubscriptionService.ts`) —
   internal event bus that `skandha_subscribe` WebSocket clients tap into.
 - **`ReputationService`** — ERC-7562-style stake/throttle/ban bookkeeping primitives, consulted by

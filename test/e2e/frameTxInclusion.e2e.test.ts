@@ -220,7 +220,7 @@ describe("frame tx e2e: real inclusion on a block-producing devnet", () => {
       );
 
       // Cross-check against ethrex's own receipt directly, not just
-      // Skandha's internal bookkeeping - proves a real block actually
+      // the sidecar's internal bookkeeping - proves a real block actually
       // included and executed it, matching the whole-transaction `status`
       // bit `decodeTransactionStatus` (`ReceiptService`) surfaces.
       const receipt = await rpc(urlA, "eth_getFrameTransactionReceipt", [hash]);

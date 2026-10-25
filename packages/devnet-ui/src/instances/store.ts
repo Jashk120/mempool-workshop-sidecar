@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** One Skandha instance the explorer can read from. `url` is its JSON-RPC endpoint and identifies it. */
+/** One sidecar instance the explorer can read from. `url` is its JSON-RPC endpoint and identifies it. */
 export interface Instance {
   name: string;
   url: string;
@@ -56,7 +56,7 @@ export type UrlCheck = { ok: true; url: string } | { ok: false; error: string };
 
 /**
  * Accepts `https://host`, `http://host:14337` or a full `.../rpc` URL. An
- * address with no path gets `/rpc`, which is where Skandha serves JSON-RPC.
+ * address with no path gets `/rpc`, which is where the sidecar serves JSON-RPC.
  */
 export function normalizeUrl(input: string): UrlCheck {
   const trimmed = input.trim();

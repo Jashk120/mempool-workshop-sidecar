@@ -4,7 +4,7 @@ Creates a new subscription for desired events over the WebSocket RPC connection.
 soon as it occurs.
 
 The RPC method name and the three event-type strings below (`pendingUserOps`, `submittedUserOps`,
-`onChainUserOps`) are unchanged from Skandha's original ERC-4337 implementation
+`onChainUserOps`) are unchanged from the sidecar's original ERC-4337 implementation
 (`packages/executor/src/services/SubscriptionService.ts`'s `ExecutorEvent` enum) — only the
 *payload* each event carries changed for this fork's EIP-8141 frame transactions: there is no more
 `userOp`/`userOpHash`/`entryPoint`/`prefund` shape. Each event now carries `tx` (the full

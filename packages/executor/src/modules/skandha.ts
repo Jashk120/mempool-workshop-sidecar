@@ -15,7 +15,7 @@ import { MempoolService } from "../services/index.js";
 import { FrameTransactionStatus } from "./interfaces.js";
 
 /**
- * EIP-8141 frame-transaction adaptation of Skandha's custom RPC surface.
+ * EIP-8141 frame-transaction adaptation of sidecar's custom RPC surface.
  *
  * No `getFeeHistory`: it used to reconstruct historical
  * `maxFeePerGas`/`maxPriorityFeePerGas` averages by filtering

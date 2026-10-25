@@ -27,7 +27,7 @@ afterEach(() => {
 describe("pool screen", () => {
   it("shows the selected instance's facts and only what is in its mempool", async () => {
     renderApp({ instances: [A, B] });
-    expect(await screen.findByText("Chain 1337, auto bundling, Skandha 4.1.1 (a1b2c3d), p2p on")).toBeTruthy();
+    expect(await screen.findByText("Chain 1337, auto bundling, Sidecar 4.1.1 (a1b2c3d), p2p on")).toBeTruthy();
     expect(await screen.findByTitle(TX.onChain.hash)).toBeTruthy();
     expect(screen.getByTitle(TX.sponsored.hash)).toBeTruthy();
     expect(screen.getByTitle(TX.replacedNew.hash)).toBeTruthy();

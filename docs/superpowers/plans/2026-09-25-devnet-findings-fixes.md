@@ -20,9 +20,9 @@
 | F4 | `Cancelled` transactions have no reason in the explorer | `FrameTxMempoolEntry.setStatus` keeps `revertReason` only for `Reverted`; the three call sites that pass one for `Cancelled` are ignored | T4 |
 | F5 | 3 of a 6-transaction burst were `Cancelled` after two submissions (chain id one aside) | Not yet known. `maxSubmitAttempts: 1` plus the privileged endpoint's one-shot inclusion window are the suspects | T5 |
 | F6 | The gateway's pool shows every transaction `New` forever | In `manual` mode the cron never runs, so nothing reconciles; and inclusion is only detected for `Submitted` entries | T7 |
-| F7 | Many causes all read "validation prefix frame reverted" (no funds, out of gas, loop, revert) | That string is ethrex's `executionError`; Skandha adds nothing | T8 |
+| F7 | Many causes all read "validation prefix frame reverted" (no funds, out of gas, loop, revert) | That string is ethrex's `executionError`; the sidecar adds nothing | T8 |
 | F8 | A validation frame that calls out with value shows "frame reverted", never OP-061 | Probably VERIFY frames are read-only (static), so the call reverts before any rule can fire. Unconfirmed | T8, T10 |
-| F9 | Explorer header reads `Skandha v4.1.1 ()` | The VM's tarball has no `.git`, so `write-git-data` records an empty commit; the UI prints it unconditionally | T6 |
+| F9 | Explorer header reads `the sidecar v4.1.1 ()` | The VM's tarball has no `.git`, so `write-git-data` records an empty commit; the UI prints it unconditionally | T6 |
 | F10 | Malformed frames (mode 7, no signatures): "Invalid Request" with no field named | `validationFactory` throws `RpcError("Invalid Request")`; the field errors are only in `data` and the message hides them | T9 |
 | F11 | Only a sender's current on-chain nonce is accepted (no queueing, no gaps) | ethrex simulation: `Nonce mismatch: expected N, got M`. Deliberate or not is an open design question | T10 (document), decision noted |
 | F12 | The playground is an untracked scratch file | | T11 |
@@ -36,7 +36,7 @@
 - `@skandha/types` changes need `cd packages/types && bun run build` before dependent packages see them (imports resolve to built `lib/`).
 - Commit trailers: `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>` and `Claude-Session: https://claude.ai/code/session_01FATqmamAtQWbUpSPzJg8dJ`. The push target is `framepool`, never `origin` (the etherspot upstream).
 - Small, self-contained fixes may be pushed straight to `develop` (the owner allowed it). T7 changes reconciliation behaviour and should go through a PR.
-- The public devnet is deployed by hand (no CI): the procedure is in `deploy/devnet/README.md` ("Updating Skandha"). T12 is the only task that touches the VMs, and each restart is a few seconds of downtime, so get the owner's go-ahead first.
+- The public devnet is deployed by hand (no CI): the procedure is in `deploy/devnet/README.md` ("Updating the sidecar"). T12 is the only task that touches the VMs, and each restart is a few seconds of downtime, so get the owner's go-ahead first.
 
 ## Review Focus
 
@@ -204,7 +204,7 @@ Investigation first; the fix depends on the result. Do not change behaviour befo
 
 - **What happened.** In the first playground run, transactions "burst 4/6" to "6/6" (plus the wrong-chain one, which is a different case) ended `Cancelled`. Their events: `admitted`, `Submitted`, `Submitted`, `dropped`, with no reason (T4 now records one). Two submissions to the privileged endpoint each missed their payload; `BundlingService.selectEntries` cancels an entry once `submitAttempts > maxSubmitAttempts`, and the default was `1`.
 - **Reproduction.** Not reproduced. After the fixes were deployed, the same burst ran twice more with every transaction landing (some needed a second submission: events `Submitted`, `Submitted`, `included`, admitted about 35 s before the first submission because the cron relays on a 10 s tick). The first run also sent a 20 KB-calldata and a 40-frame transaction moments earlier, which likely crowded the next payloads. That is a hypothesis, not a measurement.
-- **A false lead, recorded so nobody repeats it.** Re-running the burst with `--only burst --keys-from 22` made every transaction fail with "validation prefix frame reverted". That was the playground's own bug: skipped scenarios still consumed keys, so the burst landed on `s31+`, which are unfunded. Comparing ethrex's direct `ethrex_simulateFrameTransaction` with Skandha's answer for 40 transactions over 100 seconds showed them always agreeing. Fixed in the tool (`--keys-from` now rotates `s1`..`s30`).
+- **A false lead, recorded so nobody repeats it.** Re-running the burst with `--only burst --keys-from 22` made every transaction fail with "validation prefix frame reverted". That was the playground's own bug: skipped scenarios still consumed keys, so the burst landed on `s31+`, which are unfunded. Comparing ethrex's direct `ethrex_simulateFrameTransaction` with the sidecar's answer for 40 transactions over 100 seconds showed them always agreeing. Fixed in the tool (`--keys-from` now rotates `s1`..`s30`).
 - **Fix.** The default `maxSubmitAttempts` is now 3 (a missed one-shot payload is retried twice more before giving up), and the cancellation reason says how many times it was relayed ("relayed N times without being included in a block"). If cancellations still appear under load, the next step is measuring the privileged endpoint's per-payload capacity in ethrex (open question for the ethrex side).
 
 ### Task 6: Show a commit only when there is one, and record it in tarball deploys (F9)
@@ -212,14 +212,14 @@ Investigation first; the fix depends on the result. Do not change behaviour befo
 **Files:**
 - Modify: `packages/devnet-ui/src/app.tsx` (header text), `packages/devnet-ui/src/app.test.tsx`
 - Modify: `packages/cli/src/util/git.ts` (`getCommit`, `getBranch`)
-- Modify: `deploy/devnet/README.md` ("Updating Skandha")
+- Modify: `deploy/devnet/README.md` ("Updating the sidecar")
 
 **Interfaces:**
 - Produces (cli): `getCommit()` returns `process.env.SKANDHA_GIT_COMMIT` when set and non-empty, before trying `git`; likewise `SKANDHA_GIT_BRANCH`. The tarball procedure builds with `SKANDHA_GIT_COMMIT=$(git rev-parse --short HEAD) bun run build`. (`bun run build` runs `write-git-data`, which today writes an empty commit when there is no `.git`.)
 
-- [ ] **Step 1: UI test:** with `info.commit === ""` the header line is `Chain 1337, auto bundling, Skandha 4.1.1, p2p on` (no parentheses); with a commit it keeps `(a1b2c3d)`. The mock's `info` has a commit, so add a `MockNode` option to blank it, or a component-level test of the string builder (extract `describeNode(info)` into `src/logic/format.ts` and test it there).
+- [ ] **Step 1: UI test:** with `info.commit === ""` the header line is `Chain 1337, auto bundling, the sidecar 4.1.1, p2p on` (no parentheses); with a commit it keeps `(a1b2c3d)`. The mock's `info` has a commit, so add a `MockNode` option to blank it, or a component-level test of the string builder (extract `describeNode(info)` into `src/logic/format.ts` and test it there).
 - [ ] **Step 2: Implement** the UI change. Step 3: cli test if `packages/cli` has a test setup, otherwise verify by hand: `SKANDHA_GIT_COMMIT=abc1234 bun packages/cli/lib/util/writeGitData.js && cat packages/cli/.git-data.json`.
-- [ ] **Step 4: Docs.** In "Updating Skandha", pass the variable when building on the VM and mention that the gateway's tree is copied from the miner's build.
+- [ ] **Step 4: Docs.** In "Updating the sidecar", pass the variable when building on the VM and mention that the gateway's tree is copied from the miner's build.
 - [ ] **Step 5: Commit** `fix(devnet-ui,cli): hide an empty commit and let deploys record one`.
 
 ---
@@ -232,7 +232,7 @@ The largest change; put it in a PR.
 - Modify: `packages/executor/src/services/BundlingService/service.ts` (`restartCron`, `tryBundle`)
 - Modify: `packages/executor/src/services/BundlingService/reconciliation.ts` (inclusion detection for `New` entries)
 - Test: `packages/executor/test/services/BundlingService/reconciliation.test.ts`, `service.test.ts`
-- Docs: `docs/skandha_explorer.md` (bundling modes), `deploy/devnet/README.md` ("Gateway node")
+- Docs: `docs/sidecar_explorer.md` (bundling modes), `deploy/devnet/README.md` ("Gateway node")
 
 **Interfaces:**
 - Consumes: `ReceiptService.getReceipt(txHash)`; the frame transaction's own hash **is** the on-chain hash (`txHash = keccak256(encodeRawFrameTx(tx))`, "used as the standard `eth_getTransactionReceipt` key" in `Eth.sendFrameTransaction`'s doc), so a `New` entry can be looked up directly.
@@ -253,16 +253,16 @@ The largest change; put it in a PR.
 - Modify: `packages/executor/src/services/UserOpValidation/validators/frameTx.ts` (the `!simResult.valid` branch) or `FrameTxSimulationService/index.ts`
 - Test: `packages/executor/test/services/UserOpValidation/validators/frameTx.test.ts`
 
-Two parts: **8a** (Skandha, in this repo) and **8b** (upstream ethrex, a written request).
+Two parts: **8a** (the sidecar, in this repo) and **8b** (upstream ethrex, a written request).
 
 **Interfaces:**
 - Consumes: `EthrexSimulateFrameTransactionResult` (`types/src/executor/validation/ethrexFrameTx.ts`): `maxCost` is always present, `payer` is null on failure, `executionError` is ethrex's text, `frames` is null on failure.
-- Produces: when `executionError` is the prefix-revert text, the rejection message becomes more specific whenever Skandha can tell: `payer 0x… has 12 wei, the transaction's maximum cost is 3400000 wei` (balance check via `publicClient.getBalance(payer)` where the payer is the sender for a self-relay prefix or the pay frame's target for a paymaster prefix), else `validation prefix frame reverted (frame limits: 30000, 50000; a frame may also have run out of gas)`. The rule stays `simulation`.
+- Produces: when `executionError` is the prefix-revert text, the rejection message becomes more specific whenever the sidecar can tell: `payer 0x… has 12 wei, the transaction's maximum cost is 3400000 wei` (balance check via `publicClient.getBalance(payer)` where the payer is the sender for a self-relay prefix or the pay frame's target for a paymaster prefix), else `validation prefix frame reverted (frame limits: 30000, 50000; a frame may also have run out of gas)`. The rule stays `simulation`.
 
 - [ ] **Step 1: Failing tests.** (a) prefix revert + payer balance below `maxCost` → message names the balance and the cost; (b) prefix revert + enough balance → message keeps ethrex's text and lists the prefix frame gas limits; (c) `getBalance` rejecting → falls back to (b), never throws.
 - [ ] **Step 2: Implement 8a.** The validator has no public client today: pass a `getBalance` function into `FrameTxValidationService`'s constructor from `Executor` (which owns the client) so tests can fake it.
-- [ ] **Step 3: 8b, the request for ethrex** (write it as `docs/ethrex-requests.md`, no code here): return, with a failed simulation, the index of the frame that failed and the halt reason (`revert` with data, `out of gas`, `stack`/`invalid opcode`, `static call violation`), so Skandha can name the rule (`out-of-gas`, `execution`) instead of one generic simulation failure. Include the six scenarios from the playground that all produce "validation prefix frame reverted".
-- [ ] **Step 4: Confirm F8.** With a local ethrex (or the devnet), call `ethrex_simulateFrameTransaction` on the playground's `VALCALL` wallet and on a variant that only reads storage; if the value call reverts because VERIFY frames are static, record that in `docs/skandha_explorer.md`'s rule table under OP-061 ("in a VERIFY frame a value call reverts before this rule can fire") rather than changing code.
+- [ ] **Step 3: 8b, the request for ethrex** (write it as `docs/ethrex-requests.md`, no code here): return, with a failed simulation, the index of the frame that failed and the halt reason (`revert` with data, `out of gas`, `stack`/`invalid opcode`, `static call violation`), so the sidecar can name the rule (`out-of-gas`, `execution`) instead of one generic simulation failure. Include the six scenarios from the playground that all produce "validation prefix frame reverted".
+- [ ] **Step 4: Confirm F8.** With a local ethrex (or the devnet), call `ethrex_simulateFrameTransaction` on the playground's `VALCALL` wallet and on a variant that only reads storage; if the value call reverts because VERIFY frames are static, record that in `docs/sidecar_explorer.md`'s rule table under OP-061 ("in a VERIFY frame a value call reverts before this rule can fire") rather than changing code.
 - [ ] **Step 5: Run; commit** `feat(executor): explain validation-prefix failures when the cause is known`.
 
 ---
@@ -285,7 +285,7 @@ Two parts: **8a** (Skandha, in this repo) and **8b** (upstream ethrex, a written
 ### Task 10: Document what the playground showed (F8, F11, F6)
 
 **Files:**
-- Modify: `deploy/devnet/devnet-readme.md` (section "Known limitations" / 5. Skandha APIs), `docs/skandha_explorer.md`
+- Modify: `deploy/devnet/devnet-readme.md` (section "Known limitations" / 5. The sidecar APIs), `docs/sidecar_explorer.md`
 
 - [ ] **Step 1: One in flight per sender.** State that the node accepts only a sender's current on-chain nonce (`Nonce mismatch: expected N, got M` for anything else): no queueing, no gaps, so a sender sends its next transaction after the previous one lands. **Decision for the owner, recorded here, not implemented:** whether the alt mempool should queue future nonces like a normal mempool. It changes admission, replacement and reconciliation, so it needs its own design.
 - [ ] **Step 2: Gateway/miner behaviour**: what `manual` bundling means (T7 makes its status follow the chain), and that transaction status is per node.
@@ -314,7 +314,7 @@ The scenarios (from the run): accepted, ordinary (EOA transfer, three transfers,
 
 Requires the owner's go-ahead: two short restarts on the public devnet.
 
-- [ ] **Step 1: Deploy the miner, then the gateway**, following `deploy/devnet/README.md` "Updating Skandha" (tarball of `framepool/develop`, build beside the live copy, stop, swap, start), with `SKANDHA_GIT_COMMIT` set (T6). Keep `~/skandha-old` for rollback.
+- [ ] **Step 1: Deploy the miner, then the gateway**, following `deploy/devnet/README.md` "Updating the sidecar" (tarball of `framepool/develop`, build beside the live copy, stop, swap, start), with `SKANDHA_GIT_COMMIT` set (T6). Keep `~/skandha-old` for rollback.
 - [ ] **Step 2: Verify the basics** as before: `skandha_explorer_info` on both, each lists the other as a peer, one transaction sent to the gateway reaches `OnChain` on the miner.
 - [ ] **Step 3: Re-run the playground** and check each finding against the table above: F1 the wrong-chain transaction is rejected with the chain id message; F2 the three fee inputs return JSON-RPC errors with ethrex's text; F3 resends say "already known"; F4 a cancelled transaction shows why; F5 per T5's result; F6 the gateway's pool shows `OnChain` for what the miner included; F7 the no-funds case names the balance; F9 the header has a commit; F10 `unknown frame mode` names the field.
 - [ ] **Step 3: Update the results** in `deploy/devnet/playground/README.md` and close the plan: delete nothing from the repo; note in the PR/commit which findings are fixed and which remain open (T5's follow-ups, T8b upstream, the nonce-queueing decision).

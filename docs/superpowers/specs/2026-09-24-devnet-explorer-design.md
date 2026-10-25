@@ -5,7 +5,7 @@ Status: Draft, awaiting review
 
 ## Goal
 
-Give the team and demo audiences a web view of what a Skandha EIP-8141 instance is doing. A viewer
+Give the team and demo audiences a web view of what a sidecar EIP-8141 instance is doing. A viewer
 can answer four questions without curl or logs:
 
 1. Why was my transaction accepted or rejected, rule by rule?
@@ -20,7 +20,7 @@ sub-project and is out of scope here.
 
 This spec covers two sub-projects. Each gets its own implementation plan.
 
-1. **Backend observability**: records and a read-only RPC surface in Skandha.
+1. **Backend observability**: records and a read-only RPC surface in the sidecar.
 2. **Explorer UI**: a static web app that reads from one or more instances.
 
 ## Non-goals

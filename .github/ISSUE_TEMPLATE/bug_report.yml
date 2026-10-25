@@ -51,8 +51,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: Skandha version or commit hash
-      description: Which version or commit hash of Skandha are you running? 
+      label: sidecar version or commit hash
+      description: Which version or commit hash of sidecar are you running? 
       placeholder: v0.0.1 or 214ee64
     validations:
       required: true

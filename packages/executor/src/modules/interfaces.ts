@@ -22,7 +22,7 @@ export class SetMempoolArgs {
 }
 
 /**
- * Return shape for `Skandha.getFrameTransactionStatus`: `tx` plus the
+ * Return shape for `the sidecar.getFrameTransactionStatus`: `tx` plus the
  * entity fields (`sender`/`payer`/`factory`) resolved by
  * `FrameTxMempoolEntry`'s validation-prefix parsing. There is no
  * `entryPoint` concept for an EIP-8141 frame transaction.

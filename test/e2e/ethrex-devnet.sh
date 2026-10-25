@@ -69,7 +69,7 @@ case "${1:-}" in
     # the container's network namespace.
     #
     # --http.api: the `ethrex` namespace (which carries
-    # `ethrex_simulateFrameTransaction`, the RPC every Skandha frame-tx
+    # `ethrex_simulateFrameTransaction`, the RPC every sidecar frame-tx
     # validation depends on) is NOT in the default `eth,net,web3` set. Without
     # it every `eth_sendFrameTransaction` fails with "Method not found".
     #

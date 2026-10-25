@@ -26,7 +26,7 @@ export async function bundlerHandler(
 
   logger.info("  ___                                            ___  ");
   logger.info(" (o o)                                          (o o) ");
-  logger.info("(  V  ) Skandha - A modular typescript bundler (  V  )");
+  logger.info("(  V  ) ERC-8421 Mempool Sidecar (  V  )");
   logger.info("--m-m--------------------------------------------m-m--");
 
   logger.info(`Using the configFile from ${configFile}`);

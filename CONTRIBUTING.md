@@ -1,6 +1,6 @@
 # Contribution Guidelines
 
-Thanks for your contribution to Skandha.
+Thanks for your contribution to the sidecar.
 
 ## Prerequisites
 

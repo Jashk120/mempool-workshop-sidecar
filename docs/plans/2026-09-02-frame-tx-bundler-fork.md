@@ -1,12 +1,12 @@
-# Frame Transaction Sidecar (Skandha Fork) Implementation Plan
+# Frame Transaction Sidecar (the sidecar Fork) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fork `/Users/alexf/skandha` into a sidecar process that participates in the private/alt mempool defined by `2026-09-02-erc7562-native-aa-mempool-spec.md`, gossiping and validating [EIP-8141](../../../../EIPs/EIPS/eip-8141.md) frame transactions instead of ERC-4337 UserOperations, while reusing Skandha's p2p transport (discv5/gossipsub/reqresp) largely as-is.
+**Goal:** Fork `/Users/alexf/skandha` into a sidecar process that participates in the private/alt mempool defined by `2026-09-02-erc7562-native-aa-mempool-spec.md`, gossiping and validating [EIP-8141](../../../../EIPs/EIPS/eip-8141.md) frame transactions instead of ERC-4337 UserOperations, while reusing the sidecar's p2p transport (discv5/gossipsub/reqresp) largely as-is.
 
 **Architecture:** Keep `packages/node` (p2p transport) and `packages/db` close to verbatim, swapping only their payload types and the handful of UserOp-specific files identified below. Delete `packages/types/src/contracts/{EPv6,EPv7,EPv8}` (generated EntryPoint ABI bindings) and `packages/executor/src/services/{EntryPointService,EventsService}` outright — there is no contract to bind to. Rewrite `packages/executor/src/services/UserOpValidation/validators/safe.ts` (the opcode/storage tracer interpreter) and `packages/executor/src/services/MempoolService/reputation.ts` (the reputation state machine) against the frame/mode model, transcribing their existing logic rule-by-rule rather than blind-diffing, using `erc-7562.md`'s finished combined-standard text as the literal source of truth for every rule — resolving ERC-4337 entity names to frame-tx roles via that document's Terminology Mapping section, and treating any rule it marks "ERC-4337 only" as not applicable here. New code is needed for: frame transaction RLP/type definitions, `compute_sig_hash`/signature validation, a simulation service that replaces `EntryPointService` without an ABI to call against, and a `IStakingRegistry` client.
 
-**Tech Stack:** TypeScript (existing Skandha stack: `viem`, `@chainsafe/ssz`, `@chainsafe/discv5`, `@chainsafe/libp2p-gossipsub`, `libp2p`), against a `geth` execution client reachable via `debug_traceCall`.
+**Tech Stack:** TypeScript (existing the sidecar stack: `viem`, `@chainsafe/ssz`, `@chainsafe/discv5`, `@chainsafe/libp2p-gossipsub`, `libp2p`), against a `geth` execution client reachable via `debug_traceCall`.
 
 **Spec:**
 - `/Users/alexf/skandha/docs/plans/2026-09-02-erc7562-native-aa-mempool-spec.md` — edits `/Users/alexf/ERCs/ERCS/erc-7562.md` in place, turning it into a combined ERC-4337 + EIP-8141 standard (a Terminology Mapping section, inline "ERC-4337 only" markers on rules that don't apply to frame transactions, and a new `FRA-*` rule family for frame-tx-specific concepts), rather than producing a separate document. This plan's validation/reputation tasks transcribe from that same file. **Do not start Phase 4/5 tasks below until that plan's self-review task is checked off** — the rule tables those tasks transcribe are not stable until then.
@@ -15,8 +15,8 @@
 
 ## Global Constraints
 
-- Every new/modified package keeps Skandha's existing monorepo layout (`packages/<name>/src/...`, lerna + nx workspace) — do not restructure the workspace itself.
-- No task may reference `packages/types/src/contracts/{EPv6,EPv7,EPv8}` after Task 2 deletes them; any later task whose original Skandha file imports from there must have that import removed as part of adapting the file, not left dangling.
+- Every new/modified package keeps the sidecar's existing monorepo layout (`packages/<name>/src/...`, lerna + nx workspace) — do not restructure the workspace itself.
+- No task may reference `packages/types/src/contracts/{EPv6,EPv7,EPv8}` after Task 2 deletes them; any later task whose original sidecar file imports from there must have that import removed as part of adapting the file, not left dangling.
 - No task may add a new dependency to `packages/node` beyond upgrading existing libp2p-family packages (Task 11) — the p2p transport's minimal UserOp-coupling is the reason it's reusable; don't reintroduce coupling by importing executor-package types into it. `packages/node` may depend only on new types added to `packages/types/src/node` (frame-tx SSZ schemas), never directly on `packages/executor`.
 - Every pure function introduced (RLP/SSZ codecs, `compute_sig_hash`, signature validators, associated-storage slot matching, validation-prefix classification) MUST have a unit test with concrete input/output vectors — no task that introduces such a function may skip its test step.
 - Every deletion task (Tasks 2, 3, 25) MUST end with a full workspace build (`bun run build` or the repo's existing build script) passing with zero references to the deleted code, not just "the file compiles in isolation."
@@ -1855,7 +1855,7 @@ git commit -m "feat(executor): add IStakingRegistry client"
 - Consumes: `encodeFrameTx`/`computeSigHash` (Task 6), `validateSignature` (Task 7), `GethTracer` (unchanged), `FrameTxValidationService` (Task 13).
 - Produces: `FrameTxSimulationService.simulate(tx: FrameTransaction): Promise<FrameTxSimulationResult>`, the direct replacement for `EntryPointService.encodeSimulateValidation`/`parseValidationResult`/`balanceOf` — but built around a `debug_traceCall` against the frame transaction's own decoded execution semantics (per EIP-8141 §Behavior) rather than an ABI-encoded call to a contract. Consumed by Task 22 (RPC surface `sendFrameTransaction`/`estimateFrameTransactionGas`).
 
-**This task has no direct ERC-4337/Skandha precedent to port from** — `EntryPointService` assumed a deployed contract to call `eth_call`/`debug_traceCall` against; here, "simulating a frame transaction" means executing the protocol-defined per-frame behavior (EIP-8141 §Behavior: signature validation, then each frame's `mode`/`target`/`APPROVE` handling) directly, which requires either (a) a geth build that accepts `FRAME_TX_TYPE` (`0x06`) transactions and can simulate them via a standard `eth_call`-equivalent once EIP-8141 is actually implemented in the execution client, or (b) a client-side EVM interpreter shim that replays the frame semantics against `debug_traceCall`'s state-override primitives when no compliant execution client is available yet. Resolve which path applies before starting Step 3 below — this is a real environment dependency, not a coding choice this plan can make in the abstract.
+**This task has no direct ERC-4337/the sidecar precedent to port from** — `EntryPointService` assumed a deployed contract to call `eth_call`/`debug_traceCall` against; here, "simulating a frame transaction" means executing the protocol-defined per-frame behavior (EIP-8141 §Behavior: signature validation, then each frame's `mode`/`target`/`APPROVE` handling) directly, which requires either (a) a geth build that accepts `FRAME_TX_TYPE` (`0x06`) transactions and can simulate them via a standard `eth_call`-equivalent once EIP-8141 is actually implemented in the execution client, or (b) a client-side EVM interpreter shim that replays the frame semantics against `debug_traceCall`'s state-override primitives when no compliant execution client is available yet. Resolve which path applies before starting Step 3 below — this is a real environment dependency, not a coding choice this plan can make in the abstract.
 
 - [ ] **Step 1: Determine which execution-client path is available**
 
@@ -2210,9 +2210,9 @@ describe("frame tx e2e: two-node gossip round trip", () => {
   beforeAll(async () => {
     // Spawn a bootnode and a regular node, per P2P.md's documented flags,
     // substituting --executor.bundlingMode manual as in the existing
-    // Skandha workflow. Implementer note: fill in the exact CLI
+    // The sidecar workflow. Implementer note: fill in the exact CLI
     // invocation once Task 22's CLI flag names are finalized (they will
-    // differ from Skandha's --p2p.bootEnrs etc. only in flag names tied
+    // differ from the sidecar's --p2p.bootEnrs etc. only in flag names tied
     // to renamed RPC methods, not in the underlying node/network layer,
     // which Task 11 already confirmed still functions).
   });
@@ -2268,17 +2268,17 @@ git commit -m "test(e2e): add two-node frame tx gossip round-trip integration te
 
 **Files:**
 - Modify: `/Users/alexf/skandha/README.md`, `/Users/alexf/skandha/P2P.md`
-- Delete or update: `docs/skandha_subscribe.md`, `docs/skandha_userOperationStatus.md` (audit for UserOp-specific RPC references per Task 22/23's renames)
+- Delete or update: `docs/sidecar_subscribe.md`, `docs/skandha_userOperationStatus.md` (audit for UserOp-specific RPC references per Task 22/23's renames)
 
 **Interfaces:**
 - Consumes: the final RPC method names/CLI flags from Tasks 22–24.
-- Produces: documentation that matches the shipped fork, not the original Skandha.
+- Produces: documentation that matches the shipped fork, not the original sidecar.
 
 - [ ] **Step 1: Audit both docs files for UserOp-specific RPC method names**
 
 ```bash
 cd /Users/alexf/skandha
-grep -n "eth_sendUserOperation\|eth_getUserOperation\|UserOperation" docs/skandha_subscribe.md docs/skandha_userOperationStatus.md README.md P2P.md
+grep -n "eth_sendUserOperation\|eth_getUserOperation\|UserOperation" docs/sidecar_subscribe.md docs/skandha_userOperationStatus.md README.md P2P.md
 ```
 
 - [ ] **Step 2: Update each matched reference to its Task 22/23-renamed equivalent** (`eth_sendUserOperation` → `eth_sendFrameTransaction`, etc. — use the exact final names as implemented, not the plan's sketch names, since Task 22/23's implementer notes left some naming decisions open).
@@ -2291,7 +2291,7 @@ grep -n "eth_sendUserOperation\|eth_getUserOperation\|UserOperation" docs/skandh
 grep -rn "UserOperation\|validateUserOp\|handleOps" README.md P2P.md docs/
 ```
 
-Expected: zero matches outside of any explicitly-retained "for context, this fork started from ERC-4337's Skandha" historical note.
+Expected: zero matches outside of any explicitly-retained "for context, this fork started from ERC-4337's the sidecar" historical note.
 
 - [ ] **Step 5: Commit**
 

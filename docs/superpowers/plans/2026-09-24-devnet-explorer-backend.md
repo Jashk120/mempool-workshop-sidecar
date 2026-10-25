@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Record per-rule admission reports and a per-transaction lifecycle log inside a Skandha instance, and expose them through read-only `skandha_explorer_*` RPC methods and a resumable WebSocket stream.
+**Goal:** Record per-rule admission reports and a per-transaction lifecycle log inside a sidecar instance, and expose them through read-only `skandha_explorer_*` RPC methods and a resumable WebSocket stream.
 
 **Architecture:** A new `ExplorerService` (in-memory, bounded) holds `AdmissionRecord`s and a `LifecycleEvent` ring buffer. `FrameTxValidationService` builds a `RuleCheck[]` through a `CheckCollector` while still throwing `RpcError` at the same sites. `Eth.sendFrameTransaction` records every accepted and rejected admission. The event bus feeds lifecycle events. A new `Explorer` module and API layer expose the data, gated by `--explorer.enable`.
 
@@ -3287,12 +3287,12 @@ EOF
 ### Task 10: Docs, full verification and smoke test
 
 **Files:**
-- Create: `docs/skandha_explorer.md`
+- Create: `docs/sidecar_explorer.md`
 - Modify: `CLAUDE.md` (two short additions)
 
 - [ ] **Step 1: Write the RPC doc**
 
-Create `docs/skandha_explorer.md` in the style of the existing `docs/skandha_subscribe.md`. It must contain:
+Create `docs/sidecar_explorer.md` in the style of the existing `docs/sidecar_subscribe.md`. It must contain:
 - one paragraph on purpose, and that everything requires `--explorer.enable` (otherwise `-32601`-style "method not found"), that history is in memory and cleared on restart, and that the methods are read-only and unrelated to `debug_bundler_*`;
 - the wire conventions (plain JSON, hex quantities, no hexlify);
 - one section per method (`skandha_explorer_info`, `listTransactions`, `listAdmissions`, `getTransaction`, `peers`) with params, result shape (refer to the type names in `packages/types/src/explorer/index.ts`) and one request/response example each, using real output captured in Step 4 (do not invent example values);
@@ -3307,7 +3307,7 @@ Add to the "Key services" list, after `ReceiptService`:
 - **`ExplorerService`** (`services/ExplorerService/`) — in-memory admission reports (`AdmissionRecord`,
   built via `CheckCollector` while `FrameTxValidationService` runs) and a bounded lifecycle event log.
   Created only with `--explorer.enable`; served read-only through `skandha_explorer_*`
-  (`modules/explorer.ts`) and the `explorerEvents` stream. See `docs/skandha_explorer.md`.
+  (`modules/explorer.ts`) and the `explorerEvents` stream. See `docs/sidecar_explorer.md`.
 ```
 and add `--explorer.enable` to the "Key CLI flags" sentence.
 
@@ -3330,18 +3330,18 @@ curl -s localhost:14337/rpc/ -H 'content-type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"skandha_explorer_info","params":[]}'
 curl -si -X OPTIONS localhost:14337/rpc/ -H 'Origin: http://localhost:5173' \
   -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type' | grep -i '^access-control'
-# submit one valid and one invalid frame tx (see docs/skandha_frameTransactionStatus.md for the shape), then:
+# submit one valid and one invalid frame tx (see docs/sidecar_frameTransactionStatus.md for the shape), then:
 curl -s localhost:14337/rpc/ -H 'content-type: application/json' \
   -d '{"jsonrpc":"2.0","id":2,"method":"skandha_explorer_listAdmissions","params":[{"outcome":"rejected"}]}'
 # and without the flag, the same info call must return a method-not-found error:
 ```
-Expected: `info` returns `protocolVersion: 1` and numeric (not hex-string) `latestSeq`; the OPTIONS response carries `access-control-allow-origin`; the rejected transaction appears with `checks` showing the failing rule and later rules `skipped`; restarting without `--explorer.enable` makes `info` fail with method-not-found. Paste the real outputs into the examples in `docs/skandha_explorer.md`.
+Expected: `info` returns `protocolVersion: 1` and numeric (not hex-string) `latestSeq`; the OPTIONS response carries `access-control-allow-origin`; the rejected transaction appears with `checks` showing the failing rule and later rules `skipped`; restarting without `--explorer.enable` makes `info` fail with method-not-found. Paste the real outputs into the examples in `docs/sidecar_explorer.md`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 cd /Users/alexf/skandha
-git add docs/skandha_explorer.md CLAUDE.md
+git add docs/sidecar_explorer.md CLAUDE.md
 git commit -m "$(cat <<'EOF'
 docs: skandha_explorer RPC reference and CLAUDE.md notes
 

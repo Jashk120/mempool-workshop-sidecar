@@ -207,7 +207,7 @@ export function InstanceRail() {
     <nav aria-label="Instances" className="bg-rail">
       <h2 className="px-4 pt-5 pb-3 text-[1.125rem]">Instances</h2>
       {instances.length === 0 ? (
-        <p className="px-4 pb-3 text-ink-soft">No instances yet. Add the URL of a Skandha node to start.</p>
+        <p className="px-4 pb-3 text-ink-soft">No instances yet. Add the URL of a sidecar node to start.</p>
       ) : (
         <ul className="m-0 list-none border-t border-line p-0">
           {instances.map((instance) => (

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Recognize the `pre_verify` validation-prefix frame subclass (ERC-2028 `PREFIX-010`–`PREFIX-120`) so Skandha can admit a transaction whose validation prefix writes state before it approves.
+**Goal:** Recognize the `pre_verify` validation-prefix frame subclass (ERC-2028 `PREFIX-010`–`PREFIX-120`) so the sidecar can admit a transaction whose validation prefix writes state before it approves.
 
 **Architecture:** `recognizeValidationPrefix` (`packages/executor/src/services/UserOpValidation/utils/validationPrefix.ts`) changes from matching four fixed frame-mode sequences to classifying the unambiguous `VERIFY`-mode approving frames first, then resolving each remaining `DEFAULT`-mode frame as `pre_verify` (adjacent to and target-matching an approving frame) or `deploy` (the leading, non-matching fallback) by exclusion. Every downstream rule (opcode, storage, CREATE, budget) already iterates per role across however many frames that role owns, so once a `pre_verify` frame is correctly attributed a role, it needs no further code changes — verified by an end-to-end test, not just claimed.
 

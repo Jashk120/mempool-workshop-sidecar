@@ -27,7 +27,7 @@ import { initPeerIdAndEnr } from "./initPeerIdAndEnr.js";
 export async function nodeHandler(args: IGlobalArgs): Promise<void> {
   logger.info("  ___                                            ___  ");
   logger.info(" (o o)                                          (o o) ");
-  logger.info("(  V  ) Skandha - A modular typescript bundler (  V  )");
+  logger.info("(  V  ) ERC-8421 Mempool Sidecar (  V  )");
   logger.info("--m-m--------------------------------------------m-m--");
 
   const params = await getNodeConfigFromArgs(args);

@@ -1,9 +1,9 @@
 name: Publish Docker image
 
-# Builds and publishes the Skandha bundler image from the root Dockerfile, so
+# Builds and publishes the sidecar bundler image from the root Dockerfile, so
 # a devnet VM (or anyone else) can `docker pull` a ready-built image instead
 # of building from source on the deploy target. See deploy/devnet/README.md
-# ("Updating Skandha").
+# ("Updating the sidecar").
 
 on:
   push:
@@ -21,7 +21,7 @@ env:
 
 jobs:
   build-and-push-image:
-    name: Build and push the Skandha image
+    name: Build and push the sidecar image
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

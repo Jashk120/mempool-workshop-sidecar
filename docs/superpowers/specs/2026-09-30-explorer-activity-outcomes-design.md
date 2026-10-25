@@ -2,7 +2,7 @@
 
 **Status:** design, not yet implemented. Part of explorer feedback #1 ("cancelled vs.
 rejected", see `docs/superpowers/specs/2026-09-24-devnet-explorer-design.md` and
-`docs/skandha_explorer.md` for the explorer's existing shape).
+`docs/sidecar_explorer.md` for the explorer's existing shape).
 
 ## Context & goal
 

@@ -1,6 +1,6 @@
 # @skandha/devnet-ui
 
-A web explorer for Skandha EIP-8141 instances. Point it at one or more nodes started with
+A web explorer for the sidecar EIP-8141 instances. Point it at one or more nodes started with
 `--explorer.enable` and it shows, for the selected node:
 
 - **Pool**: what is in the mempool now, updating live.
@@ -11,7 +11,7 @@ A web explorer for Skandha EIP-8141 instances. Point it at one or more nodes sta
 - **Faucet**: a button, shown only when the node has a faucet (`SKANDHA_FAUCET_KEY`), that asks the node to send 1 ETH to an address.
 
 It is a static single-page app. It talks to each node directly over JSON-RPC and WebSocket
-(`skandha_explorer_*`, see [`docs/skandha_explorer.md`](../../docs/skandha_explorer.md)), so a node
+(`skandha_explorer_*`, see [`docs/sidecar_explorer.md`](../../docs/sidecar_explorer.md)), so a node
 must allow this page's origin (`--api.cors`, default `*`).
 
 ## Run it

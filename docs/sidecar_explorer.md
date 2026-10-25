@@ -98,7 +98,7 @@ Result: `ExplorerInfo`
 | ----------------- | ---------------------------------------------------------------------------- |
 | `protocolVersion` | Version of this API. Currently `1`.                                          |
 | `chainId`         | Chain id this node serves (number).                                          |
-| `version`/`commit`| Skandha version and git commit.                                              |
+| `version`/`commit`| sidecar version and git commit.                                              |
 | `bundlingMode`    | Current bundling mode, `auto` (relays on an interval) or `manual` (relays on demand only). Both follow the chain and mark held transactions `OnChain`/`Reverted` when they are mined. |
 | `p2pEnabled`      | `true` when the node runs with the libp2p layer (`./skandha node`).          |
 | `latestSeq`       | Highest lifecycle event `seq` recorded so far, `0` if none yet.              |
@@ -675,7 +675,7 @@ received funds, rate limited, faucet empty).
 The lifecycle event log is also available as a push stream, over the WebSocket RPC (`--api.ws`,
 enabled by default, same port as HTTP unless `--api.wsPort` is changed). The subscription uses the
 same `skandha_subscribe` / `skandha_unsubscribe` methods and `skandha_subscription` notification
-envelope as the other streams (see [`skandha_subscribe`](./skandha_subscribe.md)), with the event
+envelope as the other streams (see [`skandha_subscribe`](./sidecar_subscribe.md)), with the event
 type `explorerEvents`. A node started without `--explorer.enable` refuses the subscription (see
 [Disabled explorer](#disabled-explorer): over WebSocket the error has no `code`).
 
@@ -808,7 +808,7 @@ What the rules can and cannot show, observed on the devnet:
   `OP-061` rarely fires: such a transaction is rejected by `simulation` with "validation prefix
   frame reverted", not by `OP-061`.
 - The execution client reports every failure of the validation prefix as "validation prefix frame
-  reverted": no funds, running out of gas, a revert and a loop look alike. Skandha adds what it
+  reverted": no funds, running out of gas, a revert and a loop look alike. The sidecar adds what it
   can tell for itself: when the payer's balance is below the transaction's maximum cost the message
   says so with both amounts, otherwise it lists the gas limits the prefix frames were given.
 

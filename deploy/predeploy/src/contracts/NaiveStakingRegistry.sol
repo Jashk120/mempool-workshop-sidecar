@@ -5,7 +5,7 @@ pragma solidity ^0.8.20;
 /// no slashing (the spec itself has none: "there are no penalization
 /// mechanisms in the alternative mempools protocol and the stake is never
 /// slashed"), no admin, purely per-caller stake bookkeeping. Deployed once
-/// to the Skandha devnet so StakingRegistryService/FrameTxValidationService's
+/// to the sidecar devnet so StakingRegistryService/FrameTxValidationService's
 /// stake-gated code paths can be exercised against a real on-chain stake
 /// instead of the AddressZero placeholder's always-zero short-circuit.
 contract NaiveStakingRegistry {

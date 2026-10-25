@@ -79,7 +79,7 @@ export function describeError(err: unknown, url: string): ErrorNotice {
     return {
       kind: "disabled",
       title: "The explorer isn't available on this node",
-      hint: "Start Skandha with --explorer.enable. Nodes older than the explorer don't have it.",
+      hint: "Start the sidecar with --explorer.enable. Nodes older than the explorer don't have it.",
     };
   }
   if (err instanceof ProtocolError) {
@@ -96,7 +96,7 @@ export function describeError(err: unknown, url: string): ErrorNotice {
     return {
       kind: "http",
       title: `The node answered HTTP ${err.status}`,
-      hint: "It may sit behind a proxy that doesn't forward /rpc to Skandha.",
+      hint: "It may sit behind a proxy that doesn't forward /rpc to the sidecar.",
     };
   }
   return {

@@ -246,7 +246,7 @@ describe("FrameTxSimulationService.simulate", () => {
     // whether it ran and reported execution results - a `false`
     // canonicalMempoolValid does not imply missing data. This proves
     // neither simulate()'s own gate nor FrameTxValidationService.validate()'s
-    // gate treats canonicalMempoolValid as fail-closed on its own: Skandha's
+    // gate treats canonicalMempoolValid as fail-closed on its own: the sidecar's
     // own ERC-7562 checks against the real trace are the actual admission
     // gate now.
     const result = passingEthrexResult();

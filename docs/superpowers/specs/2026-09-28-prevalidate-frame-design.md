@@ -7,7 +7,7 @@ Status: Draft, awaiting review
 
 Recognize the `pre_verify` validation-prefix frame subclass defined by [ERC-2028, "Frame Transaction
 Alternative Mempools"](https://github.com/ethereum/ERCs/pull/2028) (`PREFIX-010` to `PREFIX-120`), so
-Skandha can admit a transaction whose validation prefix writes state before it approves — the
+The sidecar can admit a transaction whose validation prefix writes state before it approves — the
 paymaster-pulls-an-ERC-20-payment case ERC-7562 supported under ERC-4337 and EIP-8141's canonical
 mempool alone cannot express. Alex needs to demonstrate a state-writing validation prefix soon,
 ahead of full ERC-2028 support.
@@ -31,11 +31,11 @@ see [Downstream rules](#downstream-rules-unchanged).
 - `PREFIX-110`'s "target must have deployed code" requirement — see [§3](#3-prefix-110s-deployed-code-half-deferred-not-implemented).
 - Everything else in ERC-2028: the Staking Registry contract, reputation/banning, payer-solvency
   reservation, propagation/peer-scoring rules, replacement/eviction/revalidation lifecycle. Those
-  define a distinct alternative mempool ruleset; Skandha's canonical mempool stays on the current
+  define a distinct alternative mempool ruleset; the sidecar's canonical mempool stays on the current
   ERC-7562-derived ruleset for all of that. Picking this back up is a separate, later piece of work
   (see `[[project-erc2028-prefix-shapes]]` memory).
 - `PREFIX-120` (an approving frame's code must check its preceding `pre_verify` frame's status
-  before calling `APPROVE`) is a requirement on the *validated contract's* code, not on Skandha.
+  before calling `APPROVE`) is a requirement on the *validated contract's* code, not on the sidecar.
   The ERC itself says a node cannot verify it in general; nothing to implement here.
 
 ## Background: current prefix recognition
@@ -187,12 +187,12 @@ field) needs a look during implementation; flagged here so it isn't dropped sile
   `validation_prefix()` recognizer first (`crates/common/types/transaction.rs`, the
   `eip8141-tracer`/`forshtat/eip8141-tracer` branches) — anything outside the original four shapes
   is `UnrecognizedPrefix`, so `FrameTxValidationService.validate` rejects it on `!simResult.valid`
-  before Skandha's own recognition logic is ever exercised against a real node. Even the two shapes
+  before the sidecar's own recognition logic is ever exercised against a real node. Even the two shapes
   ethrex would accept by misreading a `pre_verify` frame as `deploy` (`[pre_verify, self_verify]`,
   `[pre_verify, only_verify, pay]`) get blocked downstream by ethrex's mempool validation observer
   (`crates/vm/levm/src/vm.rs`/`validation_observer.rs`), which currently allows `SSTORE` only inside
   the `deploy` frame and only on the sender's own storage — an ERC-20 `transferFrom` pull writes the
-  token contract's storage, so it still fails. **The Skandha-side code in this plan is fail-closed
+  token contract's storage, so it still fails. **The sidecar-side code in this plan is fail-closed
   and correct regardless** (it makes the recognition correct so it's *ready* for an ethrex-side
   fix), but the demo this work was meant to unblock needs a matching ethrex change before it can
   actually run against a real node — verify against the real devnet ethrex (`test/e2e/ethrex-devnet.sh`)

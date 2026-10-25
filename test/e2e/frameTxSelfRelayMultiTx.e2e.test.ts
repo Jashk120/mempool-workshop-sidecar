@@ -39,7 +39,7 @@ import {
  *
  * The obvious way to write this test - sign nonce N and nonce N+1 from the
  * same sender and submit both via `eth_sendFrameTransaction` - does not
- * work against this shared e2e devnet, and it's not a Skandha bug: ethrex
+ * work against this shared e2e devnet, and it's not a sidecar bug: ethrex
  * simulates every submission against CURRENT LATEST STATE, with no
  * pending-nonce queue concept (see `frameTxSync.e2e.test.ts`'s own comment
  * on the same constraint). This devnet never mines a block at all
@@ -47,7 +47,7 @@ import {
  * comment on the Hegota/`engine_forkchoiceUpdatedV4` incompatibility), so
  * an account's on-chain nonce never advances past genesis; a real second
  * transaction at nonce N+1 is rejected by ethrex itself
- * ("Nonce mismatch: expected N, got N+1") before Skandha's own mempool
+ * ("Nonce mismatch: expected N, got N+1") before the sidecar's own mempool
  * logic - the thing actually under test here - is ever reached.
  *
  * `debug_bundler_setMempool` is the right tool instead: it calls
@@ -58,13 +58,13 @@ import {
  * `checkMultipleRolesViolation` through the exact real sequence that
  * used to fail: the second `addFrameTx` call sees the first entry (same
  * sender) already in the mempool. This is still a real, unmocked
- * Skandha process and a real RPC call - it just sidesteps a devnet
+ * The sidecar process and a real RPC call - it just sidesteps a devnet
  * limitation that has nothing to do with the bug being tested.
  *
  * ## Running it
  *
  *   ./test/e2e/ethrex-devnet.sh build   # once; slow
- *   bun run build                       # Skandha's lib/ output is what runs
+ *   bun run build                       # the sidecar's lib/ output is what runs
  *   npx vitest run test/e2e/frameTxSelfRelayMultiTx.e2e.test.ts
  *
  * The devnet itself is started and stopped by this test.

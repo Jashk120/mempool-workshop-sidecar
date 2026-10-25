@@ -10,7 +10,7 @@ import type {
 } from "../src/protocol/schemas";
 
 /**
- * A fake Skandha explorer node. It keeps state in memory and answers the six
+ * A fake sidecar explorer node. It keeps state in memory and answers the six
  * `skandha_explorer_*` methods exactly like the real backend (same error codes,
  * cursor rules, page-size clamp and lifecycle-event mapping), so the UI can be
  * developed and tested without a running devnet. The HTTP/WebSocket wrapper is

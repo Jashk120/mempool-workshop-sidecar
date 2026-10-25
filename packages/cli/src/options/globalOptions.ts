@@ -31,12 +31,12 @@ interface IGlobalSingleArgs {
 
 const globalSingleOptions: ICliCommandOptions<IGlobalSingleArgs> = {
   configFile: {
-    description: "Location of the configuration file used by Skandha",
+    description: "Location of the configuration file used by the sidecar",
     type: "string",
     default: `${__dirname}/config.json`,
   },
   dataDir: {
-    description: "Location of the data directory used by Skandha",
+    description: "Location of the data directory used by the sidecar",
     type: "string",
     default: `${homedir()}/.skandha/db/`,
   },

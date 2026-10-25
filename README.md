@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>Skandha</h1>
+  <h1>ERC-8421 Mempool Sidecar</h1>
   <p><b>A TypeScript bundler and P2P sidecar for EIP-8141 frame transactions</b></p>
 </div>
 
@@ -15,14 +15,14 @@ mempool, admission reports and peers for both instances below. No setup required
 
 ## What this is
 
-Skandha exposes an `eth_sendFrameTransaction` JSON-RPC API, validates and simulates frame
+The sidecar exposes an `eth_sendFrameTransaction` JSON-RPC API, validates and simulates frame
 transactions against an execution client, relays them on-chain, and — optionally — gossips them
 between bundler nodes over a libp2p peer-to-peer mempool.
 
 There is no `EntryPoint` contract and no `eth_sendUserOperation`. A frame transaction is validated
 and relayed largely as-is, rather than assembled into a batch.
 
-Because EIP-8141 is not yet live on any public network, running Skandha requires an execution
+Because EIP-8141 is not yet live on any public network, running the sidecar requires an execution
 client that implements it. [ethrex](https://github.com/lambdaclass/ethrex)'s `eip8141-tracer`
 branch is currently the only one that does; a standard client such as geth cannot validate or
 simulate frame transactions at all.
@@ -50,7 +50,7 @@ The RPC API is available at `http://localhost:14337/rpc/`.
 
 For a local devnet to develop against, see [P2P.md](./P2P.md) — it walks through running
 [ethrex](https://github.com/lambdaclass/ethrex) via `test/e2e/ethrex-devnet.sh` and connecting
-Skandha to it.
+The sidecar to it.
 
 ## Running with Docker
 
@@ -204,7 +204,7 @@ frame transaction propagating by gossip between them.
 
 A public EIP-8141 devnet is running at `https://altmempool.forshtat.com`, with real mainnet
 contracts (LINK, USDT, BAYC so far) predeployed at fixed addresses for testing against. A second
-Skandha instance, `https://altmempoolgateway.forshtat.com`, gossips transactions to it over p2p, so
+sidecar instance, `https://altmempoolgateway.forshtat.com`, gossips transactions to it over p2p, so
 sending to either one tests the network end to end. See
 [devnet-readme.md](./deploy/devnet/devnet-readme.md) for how to connect, and
 [deployments/devnet.md](./deployments/devnet.md) for the canonical addresses and how they were

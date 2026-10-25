@@ -48,7 +48,7 @@ function Header({ instance }: { instance: Instance }) {
           <h1 className="text-[2rem] font-semibold">{instance.name}</h1>
           <p className="mt-1 text-ink-soft">
             {info.data ? (
-              `Chain ${info.data.chainId}, ${info.data.bundlingMode} bundling, Skandha ${info.data.version} (${info.data.commit}), p2p ${info.data.p2pEnabled ? "on" : "off"}`
+              `Chain ${info.data.chainId}, ${info.data.bundlingMode} bundling, Sidecar ${info.data.version} (${info.data.commit}), p2p ${info.data.p2pEnabled ? "on" : "off"}`
             ) : (
               <span className="font-mono text-[0.8125rem]">{instance.url}</span>
             )}
@@ -107,7 +107,7 @@ function EmptyInstances() {
     <div className="py-10">
       <h1 className="text-[2rem] font-semibold">No instance selected</h1>
       <p className="mt-2 max-w-[56ch] text-ink-soft">
-        Add the URL of a Skandha node in the list on the left. It needs to run with --explorer.enable.
+        Add the URL of a sidecar node in the list on the left. It needs to run with --explorer.enable.
       </p>
     </div>
   );

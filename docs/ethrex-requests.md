@@ -1,6 +1,6 @@
 # Requests for ethrex (`eip8141-tracer`)
 
-Things Skandha cannot do better without a change in the execution client. Each comes from the
+Things the sidecar cannot do better without a change in the execution client. Each comes from the
 traffic playground run of 2026-09-25 (`deploy/devnet/playground/`).
 
 ## Say which frame failed, and why, in `ethrex_simulateFrameTransaction`
@@ -25,6 +25,6 @@ Please return, for a failed simulation, alongside `executionError`:
   `stack_error`, `static_violation`, `insufficient_funds`, `nonce_mismatch`;
 - for `insufficient_funds`, the payer address, its balance and the required maximum cost.
 
-With that Skandha can report the failing frame and map `out_of_gas` to its `out-of-gas` rule and
-reverts to `execution`, instead of one generic `simulation` failure. Until then Skandha checks the
+With that sidecar can report the failing frame and map `out_of_gas` to its `out-of-gas` rule and
+reverts to `execution`, instead of one generic `simulation` failure. Until then the sidecar checks the
 payer's balance itself and lists the frame gas limits (`FrameTxValidationService.explainPrefixRevert`).

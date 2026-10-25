@@ -179,9 +179,9 @@ export function estimateMaxCost(tx: FrameTransaction): bigint {
  * violation enum: mostly self-explanatory PascalCase text (`StorageReadNonSender`,
  * `CallToNonexistentOrDelegated(0x...)`), except `BannedOpcode(N)`, whose payload
  * is the opcode's raw decimal byte - meaningless on its own. Substitutes the real
- * mnemonic and its hex value, so this reads the same as Skandha's own banned-opcode
+ * mnemonic and its hex value, so this reads the same as the sidecar's own banned-opcode
  * rejection ("uses banned opcode: GASPRICE") - ethrex's own dispatch-loop check
- * catches a banned opcode before Skandha's downstream OP-011 check ever runs, so
+ * catches a banned opcode before the sidecar's downstream OP-011 check ever runs, so
  * without this the caller only ever saw the bare number. An opcode byte this
  * table does not know (unassigned) is left as the bare number.
  */
@@ -241,7 +241,7 @@ export class FrameTxValidationService {
    * ethrex reports every failure of the validation prefix as "validation
    * prefix frame reverted": no funds, running out of gas, a revert and a
    * loop all look alike, and it names neither the frame nor the cause. Say
-   * what Skandha can tell for itself: whether the payer's balance is below
+   * what the sidecar can tell for itself: whether the payer's balance is below
    * the transaction's maximum cost, and otherwise the gas limits the prefix
    * frames were given. Any other `reason` is returned unchanged. Never
    * throws: a failed balance read only means less detail.
@@ -366,7 +366,7 @@ export class FrameTxValidationService {
     // from whether it reports execution results - `false` there does not
     // imply a missing trace. `erc7562Trace == null` is the real "no data"
     // signal; everything downstream (checkEntityCompliance's ERC-7562 rules,
-    // pre_verify-aware checks) is Skandha's own admission gate, run against
+    // pre_verify-aware checks) is the sidecar's own admission gate, run against
     // the trace regardless of ethrex's canonical-mempool verdict.
     //
     // `erc7562TraceError` is ethrex's own reason when the gas pass

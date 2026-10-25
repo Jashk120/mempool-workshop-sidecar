@@ -27,7 +27,7 @@ function json(body: unknown, status = 200): Response {
 }
 
 /**
- * Serves a `MockNode` the way a Skandha instance does: JSON-RPC over HTTP at
+ * Serves a `MockNode` the way a sidecar instance does: JSON-RPC over HTTP at
  * `/rpc` (CORS open, RpcError as HTTP 200 with `error.code`) and the
  * `explorerEvents` stream over WebSocket at the same path. `/__mock/*` are
  * test controls, not part of the real API.

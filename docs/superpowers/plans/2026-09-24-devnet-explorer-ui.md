@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build `packages/devnet-ui`, a static web explorer that shows, for a selected Skandha EIP-8141 instance, its mempool, every admission (including rejections, rule by rule), the lifecycle of a transaction, its peers, and which of the user's other instances have a given transaction and when they first saw it.
+**Goal:** Build `packages/devnet-ui`, a static web explorer that shows, for a selected the sidecar EIP-8141 instance, its mempool, every admission (including rejections, rule by rule), the lifecycle of a transaction, its peers, and which of the user's other instances have a given transaction and when they first saw it.
 
 **Architecture:** A Vite + React single-page app that talks straight to each node's read-only `skandha_explorer_*` JSON-RPC methods and its `explorerEvents` WebSocket stream. Every response is validated with zod against schemas that are compile-time-checked against the backend's wire types. Only the selected instance holds a WebSocket; a resumable stream client (`sinceSeq`, `bootId` restart check, history-gap check, backoff) feeds React Query invalidation. A fake explorer node with the real protocol behavior serves as the development backend and the browser-test target.
 
 **Tech Stack:** Bun 1.2, Vite 8, React 19, TypeScript 5.9, TanStack Query 5 and Router 1 (code-based routes), Tailwind CSS 4 with hand-built components, zod 4, Vitest 5 (jsdom) and Playwright 1.63.
 
-**Spec:** `docs/superpowers/specs/2026-09-24-devnet-explorer-design.md`, "UI design (sub-project 2)". The backend contract this plan consumes is `docs/skandha_explorer.md` and `packages/types/src/explorer/index.ts` (branch `feat/devnet-explorer-backend`, PR forshtat/framepool#3).
+**Spec:** `docs/superpowers/specs/2026-09-24-devnet-explorer-design.md`, "UI design (sub-project 2)". The backend contract this plan consumes is `docs/sidecar_explorer.md` and `packages/types/src/explorer/index.ts` (branch `feat/devnet-explorer-backend`, PR forshtat/framepool#3).
 
 ## How this plan was produced
 
@@ -84,7 +84,7 @@ Failure modes the spec implies that a happy path would not exercise. Each is pin
 
 ## Not in this plan
 
-- Serving the built app from the Skandha API server under `/ui` (the spec allows it; any static host works today). Deploying it to the public devnet is the next piece of work.
+- Serving the built app from the sidecar API server under `/ui` (the spec allows it; any static host works today). Deploying it to the public devnet is the next piece of work.
 - The frame-transaction builder.
 - Persisted history, charts, authentication.
 - A collapsible instance list on phones (the list stacks above the content; noted as a follow-up).
@@ -130,7 +130,7 @@ Create these files. The versions are exact and were verified together. Two pitfa
   "name": "@skandha/devnet-ui",
   "private": true,
   "version": "0.1.0",
-  "description": "Explorer for Skandha EIP-8141 instances (mempool, admission reports, lifecycle)",
+  "description": "Explorer for the sidecar EIP-8141 instances (mempool, admission reports, lifecycle)",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -658,7 +658,7 @@ Expected: `exit: 0` and no output from `git status`.
 - Consumes: the schemas from Task 1.
 - Produces: `rpcCall(url, method, params, schema, opts)`; error classes `UnreachableError`, `ExplorerDisabledError`, `ProtocolError`, `RpcMethodError`, `HttpStatusError`; `describeError(err, url): ErrorNotice`; `explorerApi.{info, listTransactions, listAdmissions, getTransaction, peers}`.
 
-The Skandha API answers a failed call with HTTP 200 and `{ error: { message, data, code } }`, and an unexpected crash with a 5xx and `{ error: "<string>" }`; the client handles both, plus proxy error pages that are not JSON.
+The sidecar API answers a failed call with HTTP 200 and `{ error: { message, data, code } }`, and an unexpected crash with a 5xx and `{ error: "<string>" }`; the client handles both, plus proxy error pages that are not JSON.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -926,7 +926,7 @@ export function describeError(err: unknown, url: string): ErrorNotice {
     return {
       kind: "disabled",
       title: "The explorer isn't available on this node",
-      hint: "Start Skandha with --explorer.enable. Nodes older than the explorer don't have it.",
+      hint: "Start the sidecar with --explorer.enable. Nodes older than the explorer don't have it.",
     };
   }
   if (err instanceof ProtocolError) {
@@ -943,7 +943,7 @@ export function describeError(err: unknown, url: string): ErrorNotice {
     return {
       kind: "http",
       title: `The node answered HTTP ${err.status}`,
-      hint: "It may sit behind a proxy that doesn't forward /rpc to Skandha.",
+      hint: "It may sit behind a proxy that doesn't forward /rpc to the sidecar.",
     };
   }
   return {
@@ -987,7 +987,7 @@ function summarizeIssues(error: z.ZodError): string {
 }
 
 /**
- * One JSON-RPC call over HTTP. The Skandha API answers a failed call with HTTP
+ * One JSON-RPC call over HTTP. The sidecar API answers a failed call with HTTP
  * 200 and `{ error: { message, data, code } }`, and an unexpected crash with a
  * 5xx and `{ error: "<string>" }`; both are handled here.
  */
@@ -1684,7 +1684,7 @@ Expected: the run is green again (`Tests  14 passed (14)`) and `git status` prin
 **Interfaces:**
 - Produces: `Instance`, `InstancesState`, `InstancesAction`, `instancesReducer`, `normalizeUrl`, `validateNewInstance`, `wsUrl`, `loadState`, `saveState`, `fallbackState`, `defaultInstances`, `STORAGE_KEY`.
 
-A bare origin becomes `<origin>/rpc` (where Skandha serves JSON-RPC); a URL is the instance's identity, so the same node written two ways is a duplicate; storage that is missing, blocked, corrupt or invalid falls back to the defaults.
+A bare origin becomes `<origin>/rpc` (where the sidecar serves JSON-RPC); a URL is the instance's identity, so the same node written two ways is a duplicate; storage that is missing, blocked, corrupt or invalid falls back to the defaults.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1868,7 +1868,7 @@ Expected: FAIL (`Failed to load url ./store`).
 ```ts
 import { z } from "zod";
 
-/** One Skandha instance the explorer can read from. `url` is its JSON-RPC endpoint and identifies it. */
+/** One sidecar instance the explorer can read from. `url` is its JSON-RPC endpoint and identifies it. */
 export interface Instance {
   name: string;
   url: string;
@@ -1921,7 +1921,7 @@ export type UrlCheck = { ok: true; url: string } | { ok: false; error: string };
 
 /**
  * Accepts `https://host`, `http://host:14337` or a full `.../rpc` URL. An
- * address with no path gets `/rpc`, which is where Skandha serves JSON-RPC.
+ * address with no path gets `/rpc`, which is where the sidecar serves JSON-RPC.
  */
 export function normalizeUrl(input: string): UrlCheck {
   const trimmed = input.trim();
@@ -2559,7 +2559,7 @@ export interface RuleInfo {
   explain: string;
 }
 
-/** Plain-language names for the rule ids the node reports (see docs/skandha_explorer.md). */
+/** Plain-language names for the rule ids the node reports (see docs/sidecar_explorer.md). */
 const RULE_INFO: Record<string, RuleInfo> = {
   "gas-limit": {
     label: "Gas limit",
@@ -3024,7 +3024,7 @@ import type {
 } from "../src/protocol/schemas";
 
 /**
- * A fake Skandha explorer node. It keeps state in memory and answers the five
+ * A fake sidecar explorer node. It keeps state in memory and answers the five
  * `skandha_explorer_*` methods exactly like the real backend (same error codes,
  * cursor rules, page-size clamp and lifecycle-event mapping), so the UI can be
  * developed and tested without a running devnet. The HTTP/WebSocket wrapper is
@@ -5529,7 +5529,7 @@ afterEach(() => {
 describe("pool screen", () => {
   it("shows the selected instance's facts and only what is in its mempool", async () => {
     renderApp({ instances: [A, B] });
-    expect(await screen.findByText("Chain 1337, auto bundling, Skandha 4.1.1 (a1b2c3d), p2p on")).toBeTruthy();
+    expect(await screen.findByText("Chain 1337, auto bundling, the sidecar 4.1.1 (a1b2c3d), p2p on")).toBeTruthy();
     expect(await screen.findByTitle(TX.onChain.hash)).toBeTruthy();
     expect(screen.getByTitle(TX.sponsored.hash)).toBeTruthy();
     expect(screen.getByTitle(TX.replacedNew.hash)).toBeTruthy();
@@ -6076,7 +6076,7 @@ export function InstanceRail() {
     <nav aria-label="Instances" className="bg-rail">
       <h2 className="px-4 pt-5 pb-3 text-[1.125rem]">Instances</h2>
       {instances.length === 0 ? (
-        <p className="px-4 pb-3 text-ink-soft">No instances yet. Add the URL of a Skandha node to start.</p>
+        <p className="px-4 pb-3 text-ink-soft">No instances yet. Add the URL of a sidecar node to start.</p>
       ) : (
         <ul className="m-0 list-none border-t border-line p-0">
           {instances.map((instance) => (
@@ -6832,7 +6832,7 @@ function Header({ instance }: { instance: Instance }) {
           <h1 className="text-[2rem] font-semibold">{instance.name}</h1>
           <p className="mt-1 text-ink-soft">
             {info.data ? (
-              `Chain ${info.data.chainId}, ${info.data.bundlingMode} bundling, Skandha ${info.data.version} (${info.data.commit}), p2p ${info.data.p2pEnabled ? "on" : "off"}`
+              `Chain ${info.data.chainId}, ${info.data.bundlingMode} bundling, the sidecar ${info.data.version} (${info.data.commit}), p2p ${info.data.p2pEnabled ? "on" : "off"}`
             ) : (
               <span className="font-mono text-[0.8125rem]">{instance.url}</span>
             )}
@@ -6887,7 +6887,7 @@ function EmptyInstances() {
     <div className="py-10">
       <h1 className="text-[2rem] font-semibold">No instance selected</h1>
       <p className="mt-2 max-w-[56ch] text-ink-soft">
-        Add the URL of a Skandha node in the list on the left. It needs to run with --explorer.enable.
+        Add the URL of a sidecar node in the list on the left. It needs to run with --explorer.enable.
       </p>
     </div>
   );
@@ -7038,7 +7038,7 @@ EOF
 - Consumes: `MockNode` and fixtures (Task 6), the app (Task 10).
 - Produces: `startMockServer(makeNode, port)`; `bun run mock` (three nodes on ports 14401 busy, 14402 peer, 14403 explorer off); test controls `POST /__mock/{admit,status,restart,disconnect,reset}`.
 
-`server.ts` serves a `MockNode` the way a Skandha instance does: JSON-RPC over HTTP at `/rpc` with CORS open and an `RpcError` as HTTP 200 with `error.code`, and the `explorerEvents` stream over WebSocket at the same path, registering and replaying on the next tick after the subscribe response (as the real node does). A WebSocket error carries a `message` and no `code`, matching the real node. `dev.ts` places the fixtures just before "now" so pages read as recent.
+`server.ts` serves a `MockNode` the way a sidecar instance does: JSON-RPC over HTTP at `/rpc` with CORS open and an `RpcError` as HTTP 200 with `error.code`, and the `explorerEvents` stream over WebSocket at the same path, registering and replaying on the next tick after the subscribe response (as the real node does). A WebSocket error carries a `message` and no `code`, matching the real node. `dev.ts` places the fixtures just before "now" so pages read as recent.
 
 - [ ] **Step 1: Write the server, the dev entry and the Playwright config**
 
@@ -7077,7 +7077,7 @@ function randomId(): string {
 }
 
 /**
- * Serves a `MockNode` the way a Skandha instance does: JSON-RPC over HTTP at
+ * Serves a `MockNode` the way a sidecar instance does: JSON-RPC over HTTP at
  * `/rpc` (CORS open, RpcError as HTTP 200 with `error.code`) and the
  * `explorerEvents` stream over WebSocket at the same path. `/__mock/*` are
  * test controls, not part of the real API.
@@ -7308,7 +7308,7 @@ const rowsIn = (page: Page) => page.locator("main tbody tr");
 test("shows the pool of the first instance, live, with a strip of frames per transaction", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1, name: "Devnet miner" })).toBeVisible();
-  await expect(page.getByText("Chain 1337, auto bundling, Skandha 4.1.1 (a1b2c3d), p2p on")).toBeVisible();
+  await expect(page.getByText("Chain 1337, auto bundling, the sidecar 4.1.1 (a1b2c3d), p2p on")).toBeVisible();
   await expect(page.getByRole("status").filter({ hasText: "Live" })).toBeVisible();
   await expect(page.getByTitle(TX.onChain.hash)).toBeVisible();
   await expect(page.getByTitle(TX.bannedOpcode.hash)).toHaveCount(0);
@@ -7472,7 +7472,7 @@ EOF
 ````markdown
 # @skandha/devnet-ui
 
-A web explorer for Skandha EIP-8141 instances. Point it at one or more nodes started with
+A web explorer for the sidecar EIP-8141 instances. Point it at one or more nodes started with
 `--explorer.enable` and it shows, for the selected node:
 
 - **Pool**: what is in the mempool now, updating live.
@@ -7482,7 +7482,7 @@ A web explorer for Skandha EIP-8141 instances. Point it at one or more nodes sta
 - **Peers**: the node's p2p peers.
 
 It is a static single-page app. It talks to each node directly over JSON-RPC and WebSocket
-(`skandha_explorer_*`, see [`docs/skandha_explorer.md`](../../docs/skandha_explorer.md)), so a node
+(`skandha_explorer_*`, see [`docs/sidecar_explorer.md`](../../docs/sidecar_explorer.md)), so a node
 must allow this page's origin (`--api.cors`, default `*`).
 
 ## Run it
@@ -7562,7 +7562,7 @@ and, in "Package layout", add this bullet after the `cli` bullet (the one ending
 
 ```
 - **`devnet-ui`** — a static React app (Vite, Tailwind, TanStack Query/Router) that explores one or
-  more Skandha instances through `skandha_explorer_*`: pool, activity, per-rule admission reports,
+  more sidecar instances through `skandha_explorer_*`: pool, activity, per-rule admission reports,
   peers. Not part of the `build` chain: it has its own `dev`/`test`/`build`/`test:e2e` scripts and its
   own toolchain versions (see its README). `bun run mock` there starts fake nodes for development.
 ```

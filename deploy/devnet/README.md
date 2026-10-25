@@ -77,14 +77,14 @@ then bring the stack up as above. After a reset, two more things need doing:
   gateway's `--p2p.bootEnrs` stays valid.
 - The chain is empty, so replay the predeploys (`deploy/predeploy/README.md`, "After a devnet
   restart") and put the staking registry address it prints into `stakingRegistryAddress` in both
-  nodes' `config.json`. Skandha answers every `eth_sendFrameTransaction` with `Internal error`
+  nodes' `config.json`. The sidecar answers every `eth_sendFrameTransaction` with `Internal error`
   until the registry has code (`getDepositInfo` returns no data). Addresses can differ from
   before, because they depend on the deployer's nonce history.
 
 ### Log size
 
 Without a cap, a container's JSON log grows until the disk is full. On the miner, one such log
-reached 7 GB and the full disk stopped the Skandha image from pulling. The miner has
+reached 7 GB and the full disk stopped the sidecar image from pulling. The miner has
 `/etc/docker/daemon.json`:
 
 ```json
@@ -92,12 +92,12 @@ reached 7 GB and the full disk stopped the Skandha image from pulling. The miner
 ```
 
 (then `sudo systemctl restart docker`; it applies to containers created afterwards, so recreate
-the chain containers after adding it). The gateway runs Skandha under systemd, so its journal is
+the chain containers after adding it). The gateway runs the sidecar under systemd, so its journal is
 capped instead, in `/etc/systemd/journald.conf.d/size.conf`: `SystemMaxUse=300M` and
 `SystemMaxFileSize=50M`.
 
 RPC is on `localhost:8545`, also reachable at the miner VM's external IP — the privileged
-submission endpoint (`ethrex_submitPrivilegedFrameTransaction`, used by the miner's Skandha node)
+submission endpoint (`ethrex_submitPrivilegedFrameTransaction`, used by the miner's sidecar node)
 lives on the same port. It's demo-grade and unauthenticated by design; this deployment leaves it
 publicly reachable on purpose, matching this whole devnet's demonstration-only scope. It also
 doubles as the redirect target for the gateway node's `eth_sendRawTransaction` (legacy tx
@@ -139,7 +139,7 @@ Fixed so far during that process:
 ## Running a devnet in Google Cloud
 
 End-to-end recipe for the public devnet at `https://altmempool.forshtat.com`: one VM running the
-Compose stack above, a Skandha node next to it, and Caddy for HTTPS. Everything below was run for
+Compose stack above, a sidecar node next to it, and Caddy for HTTPS. Everything below was run for
 real on this deployment unless marked *untested*. For what testers see, read `devnet-readme.md`.
 
 Set these once in your shell (the values used by the live deployment):
@@ -180,16 +180,16 @@ gcloud compute instances create $VM --project=$PROJECT --zone=$ZONE \
   --tags=eip8141-miner
 
 gcloud compute firewall-rules create eip8141-miner-p2p --project=$PROJECT \
-  --allow=tcp:4337,udp:4337 --target-tags=eip8141-miner --source-ranges=0.0.0.0/0   # Skandha libp2p
+  --allow=tcp:4337,udp:4337 --target-tags=eip8141-miner --source-ranges=0.0.0.0/0   # sidecar libp2p
 gcloud compute firewall-rules create eip8141-miner-rpc --project=$PROJECT \
   --allow=tcp:8545 --target-tags=eip8141-miner --source-ranges=0.0.0.0/0            # ethrex RPC, direct
 gcloud compute firewall-rules create eip8141-miner-web --project=$PROJECT \
   --allow=tcp:80,tcp:443 --target-tags=eip8141-miner --source-ranges=0.0.0.0/0      # Caddy
 ```
 
-Port `14337` (Skandha's own RPC) is deliberately **not** opened; Caddy reaches it on localhost.
+Port `14337` (the sidecar's own RPC) is deliberately **not** opened; Caddy reaches it on localhost.
 Drop the `eip8141-miner-rpc` rule if you do not want ethrex reachable over plain HTTP on the raw
-IP. The second, e2-micro VM (`eip8141-gateway`) runs the gateway Skandha node, see
+IP. The second, e2-micro VM (`eip8141-gateway`) runs the gateway sidecar node, see
 [Gateway node](#gateway-node) below; it has its own `eip8141-gateway-p2p` (4337) and
 `eip8141-gateway-rpc` (14337) firewall rules.
 
@@ -207,7 +207,7 @@ Log out and back in (or reconnect) so the `docker` group applies.
 ### 4. The chain: ethrex + Lighthouse
 
 Get the repo onto the VM. The branch is `master` of `forshtat/mempool-workshop-sidecar`; cloning it gives you both
-the Compose files and the Skandha source used in step 5.
+the Compose files and the sidecar source used in step 5.
 
 ```sh
 gcloud compute ssh $VM --project=$PROJECT --zone=$ZONE
@@ -216,7 +216,7 @@ git clone --depth 1 --branch master https://github.com/forshtat/mempool-workshop
 cp -r ~/skandha/deploy/devnet ~/devnet && cd ~/devnet
 ```
 
-(The live deployment copied `deploy/devnet` over with `gcloud compute scp` and shipped the Skandha
+(The live deployment copied `deploy/devnet` over with `gcloud compute scp` and shipped the sidecar
 source as a `git archive` tarball, so the VM has no `.git` and nothing records which commit it is
 running. Cloning avoids that; `git -C ~/skandha rev-parse HEAD` then tells you.)
 
@@ -261,9 +261,9 @@ watch -n6 "curl -s localhost:8545 -H 'content-type: application/json' \
 Amsterdam activates at epoch 1 (192 s after genesis) and Hegota at epoch 2 (384 s). Frame
 transactions are only valid after that.
 
-### 5. Skandha
+### 5. The sidecar
 
-The miner runs Skandha from the Docker image CI publishes on every push to `master`
+The miner runs the sidecar from the Docker image CI publishes on every push to `master`
 (`ghcr.io/forshtat/mempool-workshop-sidecar:latest`; see `.github/workflows/` for the "Publish Docker
 image" job), not from a local build — only `config.json` is bind-mounted from the host. GHCR
 creates the package private on its first publish: make it public once (GitHub > Packages >
@@ -306,7 +306,7 @@ Run it as a service. Replace `alexf` with your user and `34.67.41.151` with the 
 ```ini
 # /etc/systemd/system/skandha-miner.service
 [Unit]
-Description=Skandha miner node (EIP-8141 devnet, Docker)
+Description=sidecar miner node (EIP-8141 devnet, Docker)
 After=network.target docker.service
 Requires=docker.service
 
@@ -359,7 +359,7 @@ sudo apt-get update -qq && sudo apt-get install -y -qq caddy
 
 sudo tee /etc/caddy/Caddyfile <<'EOF'
 altmempool.forshtat.com {
-	# Skandha bundler (frame-tx alt mempool) JSON-RPC and WebSocket
+	# sidecar bundler (frame-tx alt mempool) JSON-RPC and WebSocket
 	handle /rpc* {
 		reverse_proxy localhost:14337
 	}
@@ -373,8 +373,8 @@ sudo systemctl reload caddy
 ```
 
 Caddy obtains and renews the certificate itself. The `handle` blocks give one hostname for both
-backends: `/rpc*` goes to Skandha, everything else to ethrex. Note that because Caddy connects to
-Skandha from localhost, Skandha's localhost-only gate on `debug_bundler_*` no longer protects
+backends: `/rpc*` goes to the sidecar, everything else to ethrex. Note that because Caddy connects to
+The sidecar from localhost, the sidecar's localhost-only gate on `debug_bundler_*` no longer protects
 anything. Block those paths here if you care.
 
 ### 7. Verify
@@ -383,7 +383,7 @@ anything. Block those paths here if you care.
 curl -s -X POST https://$DOMAIN -H 'content-type: application/json' \
   --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}'        # ethrex -> 0x539
 curl -s -X POST https://$DOMAIN/rpc -H 'content-type: application/json' \
-  --data '{"jsonrpc":"2.0","id":1,"method":"skandha_config","params":[]}'     # Skandha
+  --data '{"jsonrpc":"2.0","id":1,"method":"skandha_config","params":[]}'     # the sidecar
 ```
 
 Then send a frame transaction as in `devnet-readme.md` section 2.2; it should reach `OnChain` in
@@ -406,8 +406,8 @@ about 10 seconds.
   Adding `restart: unless-stopped` to the four long-running services in `docker-compose.yml` is the
   obvious hardening.
 - **Redoing genesis:** see above ("To redo genesis"). Afterwards re-fetch the beacon ENR
-  (step 4), restart `skandha-miner`, and expect Skandha's mempool to be empty.
-- **Updating Skandha:** the miner runs `ghcr.io/forshtat/mempool-workshop-sidecar:latest`, which CI
+  (step 4), restart `skandha-miner`, and expect the sidecar's mempool to be empty.
+- **Updating the sidecar:** the miner runs `ghcr.io/forshtat/mempool-workshop-sidecar:latest`, which CI
   rebuilds and pushes on every push to `master` (the "Publish Docker image" workflow;
   `gh run list --repo forshtat/mempool-workshop-sidecar --branch master` to check it landed - it normally takes
   a couple of minutes after the merge). Updating is then just
@@ -425,7 +425,7 @@ about 10 seconds.
 
 ### Gateway node
 
-The devnet tests the network end to end with two Skandha nodes. Transactions are meant to be sent to
+The devnet tests the network end to end with two sidecar nodes. Transactions are meant to be sent to
 the **gateway** (`eip8141-gateway`, e2-micro, reserved static IP `34.132.84.247` as
 `eip8141-gateway-ip`, served over HTTPS at `altmempoolgateway.forshtat.com`); it validates them and
 gossips them over p2p to the **miner** (`eip8141-miner`), which re-validates them, relays them to its
@@ -435,12 +435,12 @@ the internal network (`http://10.128.0.5:8545`; the default `default-allow-inter
 
 The gateway runs the **same Docker image as the miner** (`ghcr.io/forshtat/mempool-workshop-sidecar:latest`),
 so the two cannot run different rule sets. Docker has to be installed on it (`sudo apt-get install -y docker.io`);
-a 1 GB VM cannot build Skandha, but it runs the published image. Unit
+a 1 GB VM cannot build the sidecar, but it runs the published image. Unit
 `/etc/systemd/system/skandha-gateway.service`:
 
 ```ini
 [Unit]
-Description=Skandha gateway node (EIP-8141 devnet, Docker)
+Description=sidecar gateway node (EIP-8141 devnet, Docker)
 After=network.target docker.service
 Requires=docker.service
 
@@ -508,7 +508,7 @@ ETH from the genesis key, with any wallet or `cast send`) and keep it topped up.
 through the gateway's `rpcEndpoint`, the miner's ethrex. Without `SKANDHA_FAUCET_KEY` the node starts
 normally and just has no faucet (`info` omits `faucetEnabled`, the explorer hides the button). The
 limits are one request per address per hour and 100 per hour overall; see
-[`docs/skandha_explorer.md`](../../docs/skandha_explorer.md#skandha_explorer_faucet). Check it with a
+[`docs/sidecar_explorer.md`](../../docs/sidecar_explorer.md#skandha_explorer_faucet). Check it with a
 throwaway address (it sends 1 ETH, once per address per hour):
 
 ```sh

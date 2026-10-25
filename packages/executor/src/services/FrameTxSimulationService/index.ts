@@ -135,7 +135,7 @@ export class FrameTxSimulationService {
     // hollow/default FrameTxSimulationResult. `result.canonicalMempoolValid`
     // is deliberately NOT part of this condition: ethrex reports execution
     // results independently of its own canonical-mempool-policy opinion, and
-    // `validate()` above already ran Skandha's own ERC-7562/pre_verify-aware
+    // `validate()` above already ran the sidecar's own ERC-7562/pre_verify-aware
     // admission check against this same trace - that, not ethrex's opinion,
     // is the real gate.
     if (result.gasUsed == null || result.frames == null || !frameReceipts) {

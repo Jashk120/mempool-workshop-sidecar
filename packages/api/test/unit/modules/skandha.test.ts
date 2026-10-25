@@ -18,7 +18,7 @@ function buildSkandhaAPI(overrides: Partial<Skandha> = {}): {
 }
 
 /**
- * `SkandhaAPI`'s constructor takes only the `Skandha` module now (Task
+ * `SkandhaAPI`'s constructor takes only the sidecar module now (Task
  * 25b) - the old `Eth` dependency existed solely for `getFeeHistory`'s
  * `validateEntryPoint` check, and `getFeeHistory` has no EIP-8141 analogue
  * (see `skandha.ts`'s header comment).

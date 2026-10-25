@@ -6,7 +6,7 @@ fork's mempool — see `FrameTransactionStatus` in
 `packages/executor/src/modules/interfaces.ts`).
 
 This is a plain request/response JSON-RPC call, not a push notification — unlike
-[`skandha_subscribe`](./skandha_subscribe.md), a client polls this method itself; it does not
+[`skandha_subscribe`](./sidecar_subscribe.md), a client polls this method itself; it does not
 arrive wrapped in a `skandha_subscription` envelope.
 
 `status` is one of `New`, `Pending`, `Submitted`, `OnChain`, `Finalized`, `Cancelled`, `Reverted`

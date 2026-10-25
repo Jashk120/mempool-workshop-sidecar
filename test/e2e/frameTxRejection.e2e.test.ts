@@ -45,7 +45,7 @@ import { FRAME_MODE, APPROVE_SCOPE, SIG_SCHEME, FrameTransaction } from "@skandh
  *    node SHOULD expend validating..."), not a protocol/consensus validity
  *    rule ethrex itself enforces - ethrex would mine this transaction fine.
  *    Rejecting it anyway, on a tx with no banned opcodes and no forbidden
- *    storage access, is exactly what distinguishes Skandha's mempool as an
+ *    storage access, is exactly what distinguishes the sidecar's mempool as an
  *    EIP-8141-*specific* alternative mempool rather than a thin relay that
  *    only defers to the execution client's own judgment.
  */

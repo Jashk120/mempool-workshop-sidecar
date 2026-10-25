@@ -3,9 +3,9 @@
 **Not an ethrex issue.** The investigation below originally concluded that
 `ethrex_simulateFrameTransaction` killed the whole trace for a `BALANCE`/non-sender `SLOAD`
 violation while surviving a plain banned opcode like `TIMESTAMP`. That conclusion was wrong - it
-was never isolated against ethrex directly, only inferred from what Skandha's RPC error surfaced.
+was never isolated against ethrex directly, only inferred from what the sidecar's RPC error surfaced.
 Properly isolated (first against a clean in-repo `ethrex-levm` unit test, then by calling
-`ethrex_simulateFrameTransaction` directly against the live node, bypassing Skandha entirely),
+`ethrex_simulateFrameTransaction` directly against the live node, bypassing the sidecar entirely),
 the real cause was a bug in the hand-assembled test contract used for the original "dropped"
 outcome demo: its `APPROVE` tail used scope `2` (`EXECUTION` only - copied verbatim from
 `WALLET_INIT_CODE`'s Canonical-Paymaster-wallet-role pattern in `test/e2e/helpers.ts`), but the
@@ -26,7 +26,7 @@ frame approved payment (payer is unset)"`.
    `erc7562Trace`/`frames`/`gasUsed` fully populated every time. This directly contradicted the
    original conclusion and should have been done before writing it up.
 2. **Called `ethrex_simulateFrameTransaction` directly against the live node** (SSH'd into the
-   miner, `curl localhost:8545` - Skandha's own public RPC gateway doesn't proxy arbitrary
+   miner, `curl localhost:8545` - the sidecar's own public RPC gateway doesn't proxy arbitrary
    `ethrex_*` methods, only whitelisted `eth_*` ones, which is why this wasn't tried first)
    reusing the exact already-deployed contract from the original repro
    (`0x1e4bc194dffe3fd8119332b93616278faebca8cd`). The real response:
@@ -41,9 +41,9 @@ frame approved payment (payer is unset)"`.
      "payer": null
    }
    ```
-   The bare `"banned opcode: BALANCE (0x31)"` Skandha previously reported was never the real
+   The bare `"banned opcode: BALANCE (0x31)"` the sidecar previously reported was never the real
    failure - it was the earlier-recorded, genuinely non-fatal `canonicalMempoolViolation` that
-   Skandha's fail-closed fallback picked as the best available explanation once `erc7562Trace`
+   the sidecar's fail-closed fallback picked as the best available explanation once `erc7562Trace`
    came back `null` for the real reason above.
 3. **Confirmed the fix**: redeployed the same contract with its `APPROVE` tail corrected to scope
    `3` (`PUSH1 0x03 PUSH1 0x00 PUSH1 0x00 APPROVE` instead of `PUSH1 0x02 ...`). Simulating it
@@ -52,7 +52,7 @@ frame approved payment (payer is unset)"`.
    exact shape `docs/ethrex-requests.md`'s original (already-resolved) request asked ethrex for -
    proving the trace pipeline was never broken for this violation class at all.
 
-`BANNED_OPCODE_WALLET_INIT_CODE` in Skandha's own `test/e2e/helpers.ts` already gets this right
+`BANNED_OPCODE_WALLET_INIT_CODE` in the sidecar's own `test/e2e/helpers.ts` already gets this right
 (`...600360006000aa`, scope `3`) for exactly this reason - its own doc comment calls out the
 Self-Relay shape needing `APPROVE_EXECUTION_AND_PAYMENT`. The original demo contract should have
 been built from that reference instead of from `WALLET_INIT_CODE`.

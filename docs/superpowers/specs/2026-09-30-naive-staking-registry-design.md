@@ -16,7 +16,7 @@ implements for staked entities have never been exercised against a real chain, o
 mocks.
 
 Goal: deploy a real, naive implementation of ERC-8421's `IStakingRegistry` to the persistent
-Skandha devnet (`altmempool.forshtat.com`, the one `deploy/predeploy` already targets), and wire
+sidecar devnet (`altmempool.forshtat.com`, the one `deploy/predeploy` already targets), and wire
 `NetworkConfig`/`Executor` to point at it, so staking-gated code can be exercised end-to-end by
 hand: stake a real entity with real ETH, submit a frame transaction through it, and confirm the
 staked-entity carve-outs actually engage.
@@ -104,7 +104,7 @@ pragma solidity ^0.8.20;
 /// no slashing (the spec itself has none: "there are no penalization
 /// mechanisms in the alternative mempools protocol and the stake is never
 /// slashed"), no admin, purely per-caller stake bookkeeping. Deployed once
-/// to the Skandha devnet so StakingRegistryService/FrameTxValidationService's
+/// to the sidecar devnet so StakingRegistryService/FrameTxValidationService's
 /// stake-gated code paths can be exercised against a real on-chain stake
 /// instead of the AddressZero placeholder's always-zero short-circuit.
 contract NaiveStakingRegistry {
@@ -187,7 +187,7 @@ ABI:
 ```
 
 This ABI matches `StakingRegistryService`'s own `STAKING_REGISTRY_ABI` constant exactly for
-`getDepositInfo` (the only function Skandha itself calls) — confirmed field-for-field
+`getDepositInfo` (the only function the sidecar itself calls) — confirmed field-for-field
 (`stake: uint256`, `unstakeDelaySec: uint32`, `withdrawTime: uint64`).
 
 ### 2. Deployment

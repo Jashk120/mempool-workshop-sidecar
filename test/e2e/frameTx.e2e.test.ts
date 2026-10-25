@@ -29,7 +29,7 @@ import {
  * real ethrex execution client.
  *
  * Nothing here is mocked: a real ethrex devnet in EIP-8141 (Hegota) dev mode,
- * two real Skandha node processes speaking real gossipsub over real sockets,
+ * two real sidecar node processes speaking real gossipsub over real sockets,
  * and a real secp256k1-signed frame transaction from a genesis-funded account.
  *
  * ## Which propagation path this exercises, and why
@@ -50,7 +50,7 @@ import {
  * ## Running it
  *
  *   ./test/e2e/ethrex-devnet.sh build   # once; slow
- *   bun run build                       # Skandha's lib/ output is what runs
+ *   bun run build                       # the sidecar's lib/ output is what runs
  *   npx vitest run test/e2e/frameTx.e2e.test.ts
  *
  * The devnet itself is started and stopped by this test.

@@ -17,7 +17,7 @@ const rowsIn = (page: Page) => page.locator("main tbody tr");
 test("shows the pool of the first instance, live, with a strip of frames per transaction", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1, name: "Devnet miner" })).toBeVisible();
-  await expect(page.getByText("Chain 1337, auto bundling, Skandha 4.1.1 (a1b2c3d), p2p on")).toBeVisible();
+  await expect(page.getByText("Chain 1337, auto bundling, Sidecar 4.1.1 (a1b2c3d), p2p on")).toBeVisible();
   await expect(page.getByRole("status").filter({ hasText: "Live" })).toBeVisible();
   await expect(page.getByTitle(TX.onChain.hash)).toBeVisible();
   await expect(page.getByTitle(TX.bannedOpcode.hash)).toHaveCount(0);

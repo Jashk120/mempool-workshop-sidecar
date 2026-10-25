@@ -6,7 +6,7 @@ import { Skandha } from "@skandha/executor/lib/modules";
 import { FrameTransactionStatus } from "@skandha/executor/lib/modules/interfaces.js";
 
 /**
- * Skandha's custom RPC surface, wrapping `packages/executor`'s `Skandha`
+ * the sidecar's custom RPC surface, wrapping `packages/executor`'s `Skandha`
  * module.
  *
  * `getFeeHistory` is dropped entirely, not just renamed - see

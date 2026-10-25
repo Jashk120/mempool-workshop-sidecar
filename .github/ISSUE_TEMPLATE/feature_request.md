@@ -1,6 +1,6 @@
 ---
 name: "\U0001F680 Feature request"
-about: Suggest an idea/feature for Skandha
+about: Suggest an idea/feature for the sidecar
 title: "[FEATURE]"
 labels: enhancement
 assignees: ''
