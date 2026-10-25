@@ -10,7 +10,7 @@
 > that replaces the contract-level `UserOperation`/`EntryPoint` model with protocol-native
 > validation and execution.
 
-**🔭 [Explore the public devnet](https://altmempoolexplorer.forshtat.com/)** — a live view of the
+**🔭 [Explore the public devnet](https://explorer.altmempool.wtf/)** — a live view of the
 mempool, admission reports and peers for both instances below. No setup required.
 
 ## What this is
@@ -210,7 +210,7 @@ sending to either one tests the network end to end. See
 [deployments/devnet.md](./deployments/devnet.md) for the canonical addresses and how they were
 deployed.
 
-**[altmempoolexplorer.forshtat.com](https://altmempoolexplorer.forshtat.com/)** is a web explorer
+**[explorer.altmempool.wtf](https://explorer.altmempool.wtf/)** is a web explorer
 for both instances: the live mempool, every admission with the rule-by-rule reason a transaction
 was accepted or turned away, and p2p peers — see
 [packages/devnet-ui](./packages/devnet-ui/README.md).
