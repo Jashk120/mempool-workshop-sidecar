@@ -200,11 +200,21 @@ function AddInstance() {
   );
 }
 
+export const HOME_URL = "https://www.altmempool.wtf/";
+
 /** The shared list of instances: pick one to inspect, rename or remove it, or add another. */
 export function InstanceRail() {
   const { instances, selected } = useInstances();
   return (
     <nav aria-label="Instances" className="bg-rail">
+      <div className="px-4 pt-5">
+        <a
+          href={HOME_URL}
+          className="block border-2 border-accent bg-accent-wash px-4 py-3 text-center text-[1.25rem] font-semibold text-ink no-underline hover:bg-accent hover:text-paper"
+        >
+          Home
+        </a>
+      </div>
       <h2 className="px-4 pt-5 pb-3 text-[1.125rem]">Instances</h2>
       {instances.length === 0 ? (
         <p className="px-4 pb-3 text-ink-soft">No instances yet. Add the URL of a sidecar node to start.</p>

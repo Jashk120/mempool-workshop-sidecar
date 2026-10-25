@@ -24,6 +24,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("home link", () => {
+  it("sits above the instance list and leads to the project home page", async () => {
+    renderApp({ instances: [A] });
+    const home = await screen.findByRole("link", { name: "Home" });
+    expect(home.getAttribute("href")).toBe("https://www.altmempool.wtf/");
+    const rail = screen.getByRole("navigation", { name: "Instances" });
+    expect(rail.contains(home)).toBe(true);
+    expect(home.compareDocumentPosition(within(rail).getByRole("heading", { name: "Instances" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
 describe("pool screen", () => {
   it("shows the selected instance's facts and only what is in its mempool", async () => {
     renderApp({ instances: [A, B] });
