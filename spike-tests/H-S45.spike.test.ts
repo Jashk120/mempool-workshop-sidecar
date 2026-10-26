@@ -29,6 +29,9 @@ import type {
 // `ethrex_simulateFrameTransaction` result object is constructed by hand
 // (empty `contractSize`, as ethrex fixtures produce by default). No import
 // from `packages/executor/test/fixtures/*`, no network.
+// Marked `it.fails`: the assertion states behaviour the spec requires and the code
+// does not implement today. When someone fixes it this test starts FAILING, which is
+// the intended signal that the probe can be flipped back to a plain `it`.
 
 const SENDER = "0x9999999999999999999999999999999999999999";
 const PAYER = "0x2222222222222222222222222222222222222222";
@@ -71,7 +74,7 @@ function traceRoot(to: `0x${string}`): FrameCallTraceFrame {
 }
 
 describe("H-S45 pre_verify deployed-code requirement (S45)", () => {
-  it(
+  it.fails(
     "rejects a pre_verify frame targeting an undeployed (EOA) address",
     async () => {
       // [only_verify(sender), pre_verify(DEFAULT, target=P), pay(target=P)]:

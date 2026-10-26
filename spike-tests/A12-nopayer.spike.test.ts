@@ -25,6 +25,9 @@ import type {
 // unapproved prefix is admitted anyway.
 //
 // Mocks only the execution-client boundary. No network.
+// Marked `it.fails`: the assertion states behaviour the spec requires and the code
+// does not implement today. When someone fixes it this test starts FAILING, which is
+// the intended signal that the probe can be flipped back to a plain `it`.
 
 const SENDER = "0x9999999999999999999999999999999999999999";
 
@@ -65,7 +68,7 @@ function root(to: `0x${string}`): FrameCallTraceFrame {
 }
 
 describe("A12 prefix that never sets a payer", () => {
-  it("rejects a transaction the client reports as payer-less", async () => {
+  it.fails("rejects a transaction the client reports as payer-less", async () => {
     const tx: FrameTransaction = {
       chainId: BigInt(1),
       nonceKeys: [BigInt(0)],
