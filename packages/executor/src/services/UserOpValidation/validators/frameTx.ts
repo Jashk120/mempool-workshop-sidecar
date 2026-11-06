@@ -37,6 +37,8 @@ import { computeSigHash } from "../../FrameTxService/codec.js";
 import { validateSignature } from "../../FrameTxService/signature.js";
 import { selectPrefixTrace } from "../erc7562TraceAdapter.js";
 import {
+  MAX_VERIFY_GAS,
+  MAX_VERIFY_GAS_STAKED,
   recognizeValidationPrefix,
   validateStructuralRules,
   ValidationPrefixMatch,
@@ -307,7 +309,31 @@ export class FrameTxValidationService {
     }
     collector.pass(EXPLORER_RULES.PREFIX);
 
-    const structural = validateStructuralRules(tx, prefix);
+    // ERC-8421 [BUDGET-010]: a staked payer entity may budget more validation
+    // gas than an unstaked one. Resolve the payer's stake before the
+    // structural check so the prefix budget uses the right cap. This is one
+    // cap for the whole prefix, keyed on the payer; per-entity budgets are the
+    // eventual rule, and a staked payer cannot lift an unstaked sender's own
+    // frames past the unstaked allowance in this approximation.
+    let maxVerifyGas = MAX_VERIFY_GAS;
+    const payerFrame = prefix.frames.find(
+      (f) => f.frameIndex === prefix.payerFrameIndex
+    );
+    if (payerFrame) {
+      const payer = resolveRoleAddr("payer", payerFrame.frame, tx.sender);
+      const deposit = await this.stakingRegistryService.getDepositInfo(payer);
+      const stake = await this.reputationService.checkStake({
+        addr: payer,
+        stake: deposit.stake,
+        unstakeDelaySec: deposit.unstakeDelaySec,
+        withdrawTime: deposit.withdrawTime,
+      });
+      if (stake.code === 0) {
+        maxVerifyGas = MAX_VERIFY_GAS_STAKED;
+      }
+    }
+
+    const structural = validateStructuralRules(tx, prefix, maxVerifyGas);
     if (!structural.valid) {
       throw collector.failed(
         EXPLORER_RULES.STRUCTURE,

@@ -10,6 +10,18 @@ import { getAddress } from "viem";
 export const MAX_VERIFY_GAS = BigInt(100_000);
 
 /**
+ * ERC-8421 [BUDGET-010]: a staked entity's own validation frames may budget
+ * up to this much execution gas. The draft value is 1,000,000; the landing
+ * page's 2,500,000 has not been ratified. See `validateStructuralRules`.
+ */
+// 500k is measured, not a guess. QuotaPay T12 (scripts/zk-bench.mjs) on the
+// Groth16/BN254 membership verifier: 251,603 estimate / 248,793 gasUsed. The
+// declared ZK prefix is 15k sender verify + 330k charge frame + 12k pay frame
+// + 2.8k secp256k1 = ~360k, leaving ~140k (39%) headroom under 500k. The old
+// 1M placeholder was ~2.8x the measured need.
+export const MAX_VERIFY_GAS_STAKED = BigInt(500_000);
+
+/**
  * EIP-8141's intrinsic cost per signature, by scheme - not stated in
  * erc-7562.md (that spec states the rule, FRA-040, that this cost counts
  * against `MAX_VERIFY_GAS`, but not the constants themselves). Taken from
@@ -247,7 +259,11 @@ export type StructuralRulesResult = { valid: true } | { valid: false; reason: st
  * rejection condition on the transaction's validity — it doesn't reject
  * anything, so it is intentionally not implemented here.
  */
-export function validateStructuralRules(tx: FrameTransaction, prefix: ValidationPrefixMatch): StructuralRulesResult {
+export function validateStructuralRules(
+  tx: FrameTransaction,
+  prefix: ValidationPrefixMatch,
+  maxVerifyGas: bigint = MAX_VERIFY_GAS
+): StructuralRulesResult {
   const prefixFrameIndices = prefix.frames.map((f) => f.frameIndex);
   const lastPrefixIndex = Math.max(...prefixFrameIndices);
 
@@ -285,10 +301,10 @@ export function validateStructuralRules(tx: FrameTransaction, prefix: Validation
   // per-scheme cost comes from.
   const sigCost = signatureVerificationCost(tx);
   const totalVerifyGas = executionSum + sigCost;
-  if (totalVerifyGas > MAX_VERIFY_GAS) {
+  if (totalVerifyGas > maxVerifyGas) {
     return {
       valid: false,
-      reason: `validation prefix execution gas sum ${executionSum} + signature-verification cost ${sigCost} = ${totalVerifyGas} exceeds MAX_VERIFY_GAS ${MAX_VERIFY_GAS}`,
+      reason: `validation prefix execution gas sum ${executionSum} + signature-verification cost ${sigCost} = ${totalVerifyGas} exceeds MAX_VERIFY_GAS ${maxVerifyGas}`,
     };
   }
   if (stateSum > MAX_VERIFY_STATE_GAS) {
