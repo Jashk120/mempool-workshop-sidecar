@@ -90,4 +90,4 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           IMAGE="$(printf '%s\n' "${{ steps.meta.outputs.tags }}" | head -n1)"
-          docker run --rm "$IMAGE" --help
+          docker run --rm "$IMAGE" standalone --help
