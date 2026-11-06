@@ -1,14 +1,35 @@
-name: Publish Docker image
+name: Docker image
 
-# Builds and publishes the sidecar bundler image from the root Dockerfile, so
-# a devnet VM (or anyone else) can `docker pull` a ready-built image instead
-# of building from source on the deploy target. See deploy/devnet/README.md
-# ("Updating the sidecar").
+# Builds the sidecar bundler image from the root Dockerfile.
+#
+# - Every PR that touches the image inputs is built (no push) and smoke-tested,
+#   so a broken Dockerfile is caught before merge.
+# - Pushes to master and v* tags publish to GHCR. :latest is what a devnet VM
+#   pulls; the sha and tag refs pin a specific build.
+#
+# The image does not bake a config.json (see .dockerignore). The altmempool
+# profile in deploy/altmempool mounts its own, so relayer keys stay out of the
+# image.
 
 on:
+  pull_request:
+    paths:
+      - ".dockerignore"
+      - ".github/workflows/publish-docker-image.yml"
+      - "Dockerfile"
+      - "bun.lock"
+      - "lerna.json"
+      - "nx.json"
+      - "package.json"
+      - "tsconfig.json"
+      - "tsconfig.build.json"
+      - "packages/**"
+      - "deploy/altmempool/**"
   push:
     branches:
       - master
+    tags:
+      - "v*"
   workflow_dispatch: {}
 
 permissions:
@@ -27,24 +48,46 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to the Container registry
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Validate the altmempool compose profile
+        run: docker compose -f deploy/altmempool/docker-compose.yml config >/dev/null
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
-          push: true
-          # :latest is what a devnet VM pulls; the sha tag pins a specific
-          # build.
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-test the image
+        if: github.event_name == 'pull_request'
+        run: |
+          IMAGE="$(printf '%s\n' "${{ steps.meta.outputs.tags }}" | head -n1)"
+          docker run --rm "$IMAGE" --help

@@ -18,6 +18,11 @@ README.md
 .codeclimate.yml
 .codecov.yml
 config.json
+.env
+.env.*
+
+# Deployment workspace (compose profiles, predeploy artifacts, secrets)
+deploy
 
 # Tooling
 docker

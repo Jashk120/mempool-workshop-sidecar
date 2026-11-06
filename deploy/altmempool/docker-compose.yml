@@ -1,0 +1,45 @@
+name: altmempool-sidecar
+
+# A self-hosted sidecar whose execution upstream is the public altmempool
+# devnet. Use it as a private relay/gateway, or in front of an anon-rpc worker.
+#
+#   cp .env.example .env           # optional: relayer keys / overrides
+#   docker compose up -d
+#   curl -s -X POST http://localhost:14337/rpc \
+#     -H 'content-type: application/json' \
+#     --data '{"jsonrpc":"2.0","id":1,"method":"skandha_config","params":[]}'
+#
+# The published image is linux/amd64. On an arm64 host add:
+#   platform: linux/amd64
+
+services:
+  sidecar:
+    image: ${SIDECAR_IMAGE:-ghcr.io/forshtat/mempool-workshop-sidecar:latest}
+    command:
+      - standalone
+      - --configFile
+      - /usr/app/config.json
+      - --dataDir
+      - /usr/app/data
+      - --api.port
+      - "14337"
+      # manual = admit/forward but do not relay; auto = relay on bundleInterval.
+      - --executor.bundlingMode
+      - ${BUNDLING_MODE:-manual}
+    ports:
+      - "${SIDECAR_PORT:-14337}:14337"
+    environment:
+      # Compose reads deploy/altmempool/.env for interpolation. Empty values
+      # fall back to config.json (the sidecar treats an empty env var as unset).
+      SKANDHA_RELAYERS: ${SKANDHA_RELAYERS:-}
+      SKANDHA_RPC: ${SKANDHA_RPC:-}
+      SKANDHA_RPC_SUBMIT: ${SKANDHA_RPC_SUBMIT:-}
+      SKANDHA_STAKING_REGISTRY_ADDRESS: ${SKANDHA_STAKING_REGISTRY_ADDRESS:-}
+      SKANDHA_FAUCET_KEY: ${SKANDHA_FAUCET_KEY:-}
+    volumes:
+      - ./config.json:/usr/app/config.json:ro
+      - sidecar-data:/usr/app/data
+    restart: unless-stopped
+
+volumes:
+  sidecar-data:
