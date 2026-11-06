@@ -1,8 +1,11 @@
 import path from "node:path";
-import rocks from "@farcaster/rocksdb";
+import { createRequire } from "node:module";
+import { MemoryDb, createMemoryDb } from "./memoryDb.js";
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { IDbController } from "@skandha/types/lib/index.js";
 import { replaceBigints, reviveBigints } from "./bigintJson.js";
+
+const require = createRequire(import.meta.url);
 
 enum Status {
   started = "started",
@@ -11,11 +14,21 @@ enum Status {
 
 export class RocksDbController implements IDbController {
   private namespace: string;
-  private db: rocks;
+  private db: MemoryDb;
   private status = Status.stopped;
 
   constructor(dbDir: string, namespace: string) {
-    this.db = rocks(path.resolve(dbDir, namespace));
+    const dir = path.resolve(dbDir, namespace);
+    if (process.platform === "win32") {
+      // @farcaster/rocksdb has no Windows prebuild, so local runs use the
+      // in-memory shim. Linux (including the Docker image) stays on RocksDB.
+      this.db = createMemoryDb(dir);
+    } else {
+      // Load lazily: the native addon cannot even be required on Windows.
+      const rocks = require("@farcaster/rocksdb");
+      const factory = typeof rocks === "function" ? rocks : rocks.default;
+      this.db = factory(dir) as MemoryDb;
+    }
     this.namespace = namespace;
   }
 

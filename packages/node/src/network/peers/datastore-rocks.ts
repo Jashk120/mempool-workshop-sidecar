@@ -4,11 +4,14 @@ import filter from "it-filter";
 import map from "it-map";
 import take from "it-take";
 import sort from "it-sort";
-import rocks from "@farcaster/rocksdb";
+import { createRequire } from "node:module";
+import { MemoryDb, createMemoryDb } from "./memoryLevel.js";
 import {
   AbstractOpenOptions,
   AbstractIteratorOptions,
 } from "abstract-leveldown";
+
+const require = createRequire(import.meta.url);
 
 interface BatchPut {
   type: "put";
@@ -27,13 +30,24 @@ type BatchOp = BatchPut | BatchDel;
  * A datastore backed by leveldb
  */
 export class LevelDatastore extends BaseDatastore {
-  db: rocks;
+  db: MemoryDb;
   private readonly opts: AbstractOpenOptions;
 
-  constructor(path: string | rocks, opts: AbstractOpenOptions = {}) {
+  constructor(path: string | MemoryDb, opts: AbstractOpenOptions = {}) {
     super();
 
-    this.db = typeof path === "string" ? rocks(path) : path;
+    if (typeof path !== "string") {
+      this.db = path;
+    } else if (process.platform === "win32") {
+      // @farcaster/rocksdb has no Windows prebuild, so local runs use the
+      // in-memory shim. Linux (including the Docker image) stays on RocksDB.
+      this.db = createMemoryDb(path);
+    } else {
+      // Load lazily: the native addon cannot even be required on Windows.
+      const rocks = require("@farcaster/rocksdb");
+      const factory = typeof rocks === "function" ? rocks : rocks.default;
+      this.db = factory(path) as MemoryDb;
+    }
 
     this.opts = {
       createIfMissing: true,
@@ -76,7 +90,7 @@ export class LevelDatastore extends BaseDatastore {
           try {
             resolve(JSON.parse(value as string) as Uint8Array);
           } catch (_) {
-            return resolve(value as Uint8Array);
+            return resolve(value as unknown as Uint8Array);
           }
         });
       });
@@ -232,7 +246,7 @@ export class LevelDatastore extends BaseDatastore {
       iteratorOpts.lt = prefix + "\xFF";
     }
 
-    const iterator = this.db.iterator(iteratorOpts);
+    const iterator = this.db.iterator(iteratorOpts) as any;
 
     if (iterator[Symbol.asyncIterator as any] != null) {
       return levelIteratorToIterator(iterator as any);
